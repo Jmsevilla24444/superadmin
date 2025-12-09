@@ -1,5 +1,6 @@
 import React from "react";
-import "./AdminDashboard.css";
+import "../AdminDashboard.css";
+
 import {
   IconHome,
   IconBuilding,
@@ -7,22 +8,22 @@ import {
   IconReport,
   IconPlus,
   IconMail,
-} from "./icons";
+} from "../icons";
+
 import Users from "./Users";
-import FacilitiesInbox from "./FacilitiesInbox";
+import FacilitiesInbox from "../FacilitiesInbox";
 import Reports from "./Reports";
 import SuperAdminCreateAdmin from "./SuperAdminCreateAdmin";
 import SuperAdminEnrollees from "./SuperAdminEnrollees";
-import {
-  DUMMY_USERS,
-  DUMMY_INCOMING_FACILITIES,
-  DUMMY_REPORTS,
-  DUMMY_ENROLLEES,
-} from "./data";
-import { auth } from "./service/firebase"; // import Firebase auth
 
-const Sidebar = ({ route }) => {
+import { auth, db } from "../service/firebase";
+import LogoutMenu from "./LogoutMenu";
+
+import { collection, onSnapshot } from "firebase/firestore";
+
+const Sidebar = ({ route, counts }) => {
   const isActive = (r) => (route === r ? "ad-nav-item active" : "ad-nav-item");
+
   return (
     <aside className="ad-sidebar">
       <div className="ad-brand">
@@ -46,6 +47,7 @@ const Sidebar = ({ route }) => {
           />
         </div>
       </div>
+
       <nav className="ad-nav">
         <a className={isActive("#/su/dashboard")} href="#/su/dashboard">
           <span className="ad-nav-ico">
@@ -53,18 +55,20 @@ const Sidebar = ({ route }) => {
           </span>
           <span>Dashboard</span>
         </a>
+
         <a className={isActive("#/su/users")} href="#/su/users">
           <span className="ad-nav-ico">
             <IconCalendar size={20} stroke="#eaf2ff" />
           </span>
           <span>Users</span>
         </a>
+
         <a className={isActive("#/su/enrollees")} href="#/su/enrollees">
           <span className="ad-nav-ico">
             <IconMail size={20} stroke="#eaf2ff" />
           </span>
           <span>Enrollees</span>
-          {DUMMY_ENROLLEES.length > 0 && (
+          {counts.enrollees > 0 && (
             <span style={{ marginLeft: "auto" }}>
               <span
                 style={{
@@ -82,29 +86,54 @@ const Sidebar = ({ route }) => {
                   boxShadow: "0 1px 2px rgba(0,0,0,.15)",
                 }}
               >
-                {DUMMY_ENROLLEES.length}
+                {counts.enrollees}
               </span>
             </span>
           )}
         </a>
+
         <a className={isActive("#/su/create-admin")} href="#/su/create-admin">
           <span className="ad-nav-ico">
             <IconPlus size={20} stroke="#eaf2ff" />
           </span>
           <span>Create Admin</span>
         </a>
+
         <a className={isActive("#/su/facilities")} href="#/su/facilities">
           <span className="ad-nav-ico">
             <IconBuilding size={20} stroke="#eaf2ff" />
           </span>
           <span>Facilities</span>
+          {counts.facilities > 0 && (
+            <span style={{ marginLeft: "auto" }}>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minWidth: 18,
+                  height: 18,
+                  padding: "0 6px",
+                  background: "#10b981",
+                  color: "#fff",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  borderRadius: 999,
+                  boxShadow: "0 1px 2px rgba(0,0,0,.15)",
+                }}
+              >
+                {counts.facilities}
+              </span>
+            </span>
+          )}
         </a>
+
         <a className={isActive("#/su/reports")} href="#/su/reports">
           <span className="ad-nav-ico">
             <IconReport size={20} stroke="#eaf2ff" />
           </span>
           <span>Reports</span>
-          {DUMMY_REPORTS.length > 0 && (
+          {counts.reports > 0 && (
             <span style={{ marginLeft: "auto" }}>
               <span
                 style={{
@@ -122,7 +151,7 @@ const Sidebar = ({ route }) => {
                   boxShadow: "0 1px 2px rgba(0,0,0,.15)",
                 }}
               >
-                {DUMMY_REPORTS.length}
+                {counts.reports}
               </span>
             </span>
           )}
@@ -132,56 +161,12 @@ const Sidebar = ({ route }) => {
   );
 };
 
-const HeaderBar = ({ title }) => {
-  const [open, setOpen] = React.useState(false);
-  const ref = React.useRef(null);
-
-  React.useEffect(() => {
-    const onDocClick = (e) => {
-      if (!ref.current) return;
-      if (!ref.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener("click", onDocClick);
-    return () => document.removeEventListener("click", onDocClick);
-  }, []);
-
-  const handleLogout = async () => {
-    await auth.signOut();
-    localStorage.removeItem("superAdminUID");
-    sessionStorage.removeItem("superAdminUID");
-    window.location.hash = "#/su/login";
-  };
-
-  return (
-    <header className="ad-header">
-      <h1 className="ad-title">{title}</h1>
-      <div className="ad-profile-wrap" ref={ref}>
-        <span className="ad-profile">
-          Hi, SuperAdmin
-          <button
-            className="ad-avatar"
-            aria-label="Open menu"
-            onClick={() => setOpen((v) => !v)}
-          />
-        </span>
-        {open && (
-          <div className="ad-menu">
-            <button
-              className="ad-menu-item danger"
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                handleLogout();
-              }}
-            >
-              Logout
-            </button>
-          </div>
-        )}
-      </div>
-    </header>
-  );
-};
+const HeaderBar = ({ title }) => (
+  <header className="ad-header">
+    <h1 className="ad-title">{title}</h1>
+    <LogoutMenu />
+  </header>
+);
 
 const Stat = ({ title, value, icon, variant = "indigo" }) => (
   <div className="ad-stat">
@@ -215,6 +200,7 @@ const QuickAction = ({ title, desc, icon, href, variant = "indigo" }) => (
 const DonutChart = ({ data, colors, size = 220, hole = 0.62, centerText }) => {
   const total = data.reduce((a, b) => a + b, 0) || 1;
   let acc = 0;
+
   const stops = data
     .map((v, i) => {
       const start = (acc / total) * 360;
@@ -223,39 +209,43 @@ const DonutChart = ({ data, colors, size = 220, hole = 0.62, centerText }) => {
       const color = colors[i % colors.length];
       return `${color} ${start}deg ${end}deg`;
     })
-    .join(", ");
-
-  const outer = {
-    width: size,
-    height: size,
-    borderRadius: "50%",
-    background: `conic-gradient(${stops})`,
-    position: "relative",
-    boxShadow: "0 4px 12px rgba(0,0,0,.08)",
-  };
-  const inner = {
-    position: "absolute",
-    inset: (size * (1 - hole)) / 2,
-    width: size * hole,
-    height: size * hole,
-    background: "#fff",
-    borderRadius: "50%",
-  };
-  const label = {
-    position: "absolute",
-    top: "50%",
-    left: "50%",
-    transform: "translate(-50%, -50%)",
-    textAlign: "center",
-    lineHeight: 1.1,
-    color: "#111827",
-  };
+    .join(",");
 
   return (
-    <div style={outer} aria-label="Overview distribution">
-      <div style={inner} aria-hidden />
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        background: `conic-gradient(${stops})`,
+        position: "relative",
+        boxShadow: "0 4px 12px rgba(0,0,0,.08)",
+      }}
+      aria-label="Overview distribution"
+    >
+      <div
+        style={{
+          position: "absolute",
+          inset: (size * (1 - hole)) / 2,
+          width: size * hole,
+          height: size * hole,
+          background: "#fff",
+          borderRadius: "50%",
+        }}
+        aria-hidden
+      />
       {centerText && (
-        <div style={label}>
+        <div
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            textAlign: "center",
+            lineHeight: 1.1,
+            color: "#111827",
+          }}
+        >
           <div style={{ fontSize: 18, fontWeight: 700 }}>
             {centerText.title}
           </div>
@@ -273,12 +263,17 @@ const SuperAdminDashboard = () => {
     window.location.hash || "#/su/dashboard"
   );
   const [authenticated, setAuthenticated] = React.useState(false);
+  const [counts, setCounts] = React.useState({
+    users: 0,
+    enrollees: 0,
+    facilities: 0,
+    reports: 0,
+  });
 
   React.useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (user) {
-        setAuthenticated(true);
-      } else {
+    const unsubscribeAuth = auth.onAuthStateChanged((user) => {
+      if (user) setAuthenticated(true);
+      else {
         setAuthenticated(false);
         window.location.hash = "#/su/login";
       }
@@ -289,9 +284,36 @@ const SuperAdminDashboard = () => {
     window.addEventListener("hashchange", onHashChange);
     if (!window.location.hash) window.location.hash = "#/su/dashboard";
 
+    // Firestore realtime counts
+    const unsubUsers = onSnapshot(collection(db, "users"), (snap) =>
+      setCounts((prev) => ({ ...prev, users: snap.size }))
+    );
+
+    const unsubAdmins = onSnapshot(collection(db, "Admin"), (snap) =>
+      setCounts((prev) => ({ ...prev, users: prev.users + snap.size }))
+    );
+
+    const unsubEnrollees = onSnapshot(collection(db, "Schedules"), (snap) =>
+      setCounts((prev) => ({ ...prev, enrollees: snap.size }))
+    );
+
+    const unsubFacilities = onSnapshot(
+      collection(db, "FacilitiesInbox"),
+      (snap) => setCounts((prev) => ({ ...prev, facilities: snap.size }))
+    );
+
+    const unsubReports = onSnapshot(collection(db, "Reports"), (snap) =>
+      setCounts((prev) => ({ ...prev, reports: snap.size }))
+    );
+
     return () => {
-      unsubscribe();
+      unsubscribeAuth();
       window.removeEventListener("hashchange", onHashChange);
+      unsubUsers();
+      unsubAdmins();
+      unsubEnrollees();
+      unsubFacilities();
+      unsubReports();
     };
   }, []);
 
@@ -306,6 +328,7 @@ const SuperAdminDashboard = () => {
             <Users />
           </>
         );
+
       case "#/su/create-admin":
         return (
           <>
@@ -313,6 +336,7 @@ const SuperAdminDashboard = () => {
             <SuperAdminCreateAdmin />
           </>
         );
+
       case "#/su/enrollees":
         return (
           <>
@@ -320,6 +344,7 @@ const SuperAdminDashboard = () => {
             <SuperAdminEnrollees />
           </>
         );
+
       case "#/su/facilities":
         return (
           <>
@@ -327,6 +352,7 @@ const SuperAdminDashboard = () => {
             <FacilitiesInbox />
           </>
         );
+
       case "#/su/reports":
         return (
           <>
@@ -334,30 +360,33 @@ const SuperAdminDashboard = () => {
             <Reports />
           </>
         );
+
       default:
         return (
           <>
             <HeaderBar title="SuperAdmin Dashboard" />
+
             <section className="ad-stats">
               <Stat
                 title="Users"
-                value={String(DUMMY_USERS.length)}
+                value={counts.users}
                 icon={<IconCalendar />}
                 variant="indigo"
               />
               <Stat
                 title="Facilities Inbox"
-                value={String(DUMMY_INCOMING_FACILITIES.length)}
+                value={counts.facilities}
                 icon={<IconBuilding />}
                 variant="emerald"
               />
               <Stat
                 title="Reports"
-                value={String(DUMMY_REPORTS.length)}
+                value={counts.reports}
                 icon={<IconReport />}
                 variant="amber"
               />
             </section>
+
             <section className="ad-section">
               <h2 className="ad-section-title">Quick Actions</h2>
               <div className="ad-qa-grid">
@@ -391,6 +420,7 @@ const SuperAdminDashboard = () => {
                 />
               </div>
             </section>
+
             <section className="ad-section">
               <h2 className="ad-section-title">Overview</h2>
               <div
@@ -402,22 +432,17 @@ const SuperAdminDashboard = () => {
                 }}
               >
                 <DonutChart
-                  data={[
-                    DUMMY_USERS.length,
-                    DUMMY_INCOMING_FACILITIES.length,
-                    DUMMY_REPORTS.length,
-                  ]}
+                  data={[counts.users, counts.facilities, counts.reports]}
                   colors={["#6366f1", "#10b981", "#f59e0b"]}
                   size={220}
                   centerText={{
                     title: `${
-                      DUMMY_USERS.length +
-                      DUMMY_INCOMING_FACILITIES.length +
-                      DUMMY_REPORTS.length
+                      counts.users + counts.facilities + counts.reports
                     }`,
                     subtitle: "Total Items",
                   }}
                 />
+
                 <div style={{ display: "grid", gap: 8 }}>
                   <div
                     style={{ display: "flex", alignItems: "center", gap: 10 }}
@@ -433,10 +458,9 @@ const SuperAdminDashboard = () => {
                     <span style={{ color: "#111827", fontWeight: 600 }}>
                       Users
                     </span>
-                    <span style={{ color: "#6b7280" }}>
-                      ({DUMMY_USERS.length})
-                    </span>
+                    <span style={{ color: "#6b7280" }}>({counts.users})</span>
                   </div>
+
                   <div
                     style={{ display: "flex", alignItems: "center", gap: 10 }}
                   >
@@ -452,9 +476,10 @@ const SuperAdminDashboard = () => {
                       Facilities Inbox
                     </span>
                     <span style={{ color: "#6b7280" }}>
-                      ({DUMMY_INCOMING_FACILITIES.length})
+                      ({counts.facilities})
                     </span>
                   </div>
+
                   <div
                     style={{ display: "flex", alignItems: "center", gap: 10 }}
                   >
@@ -469,9 +494,7 @@ const SuperAdminDashboard = () => {
                     <span style={{ color: "#111827", fontWeight: 600 }}>
                       Reports
                     </span>
-                    <span style={{ color: "#6b7280" }}>
-                      ({DUMMY_REPORTS.length})
-                    </span>
+                    <span style={{ color: "#6b7280" }}>({counts.reports})</span>
                   </div>
                 </div>
               </div>
@@ -483,7 +506,7 @@ const SuperAdminDashboard = () => {
 
   return (
     <div className="ad-layout">
-      <Sidebar route={route} />
+      <Sidebar route={route} counts={counts} />
       <main className="ad-main">{renderContent()}</main>
     </div>
   );

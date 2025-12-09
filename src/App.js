@@ -1,5 +1,5 @@
 import React from "react";
-import SuperAdminDashboard from "./SuperAdminDashboard";
+import SuperAdminDashboard from "./ScreenPages/SuperAdminDashboard";
 import SuperAdminLogin from "./auth/SuperAdminLogin";
 
 function App() {
