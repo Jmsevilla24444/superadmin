@@ -11,16 +11,22 @@ import {
 } from "../icons";
 
 import Users from "./Users";
-import FacilitiesInbox from "../FacilitiesInbox";
 import Reports from "./Reports";
 import SuperAdminCreateAdmin from "./SuperAdminCreateAdmin";
 import SuperAdminEnrollees from "./SuperAdminEnrollees";
-
-import { auth, db } from "../service/firebase";
 import LogoutMenu from "./LogoutMenu";
 
-import { collection, onSnapshot } from "firebase/firestore";
+import { auth, db } from "../service/firebase";
+import { collection, onSnapshot, collectionGroup } from "firebase/firestore";
 
+// Placeholder for FacilitiesInbox if not yet implemented
+const FacilitiesInbox = () => (
+  <div style={{ padding: 24, textAlign: "center" }}>
+    Facilities Inbox content goes here
+  </div>
+);
+
+// Sidebar Component
 const Sidebar = ({ route, counts }) => {
   const isActive = (r) => (route === r ? "ad-nav-item active" : "ad-nav-item");
 
@@ -161,6 +167,7 @@ const Sidebar = ({ route, counts }) => {
   );
 };
 
+// Header Component
 const HeaderBar = ({ title }) => (
   <header className="ad-header">
     <h1 className="ad-title">{title}</h1>
@@ -168,6 +175,7 @@ const HeaderBar = ({ title }) => (
   </header>
 );
 
+// Stat Card Component
 const Stat = ({ title, value, icon, variant = "indigo" }) => (
   <div className="ad-stat">
     <div className={`ad-stat-badge ${variant}`} aria-hidden>
@@ -180,6 +188,7 @@ const Stat = ({ title, value, icon, variant = "indigo" }) => (
   </div>
 );
 
+// Quick Action Card Component
 const QuickAction = ({ title, desc, icon, href, variant = "indigo" }) => (
   <button
     type="button"
@@ -197,6 +206,7 @@ const QuickAction = ({ title, desc, icon, href, variant = "indigo" }) => (
   </button>
 );
 
+// Donut Chart Component
 const DonutChart = ({ data, colors, size = 220, hole = 0.62, centerText }) => {
   const total = data.reduce((a, b) => a + b, 0) || 1;
   let acc = 0;
@@ -258,9 +268,10 @@ const DonutChart = ({ data, colors, size = 220, hole = 0.62, centerText }) => {
   );
 };
 
+// SuperAdminDashboard Component
 const SuperAdminDashboard = () => {
   const [route, setRoute] = React.useState(
-    window.location.hash || "#/su/dashboard"
+    window.location.hash || "#/su/dashboard",
   );
   const [authenticated, setAuthenticated] = React.useState(false);
   const [counts, setCounts] = React.useState({
@@ -284,26 +295,27 @@ const SuperAdminDashboard = () => {
     window.addEventListener("hashchange", onHashChange);
     if (!window.location.hash) window.location.hash = "#/su/dashboard";
 
-    // Firestore realtime counts
+    // Realtime counts
     const unsubUsers = onSnapshot(collection(db, "users"), (snap) =>
-      setCounts((prev) => ({ ...prev, users: snap.size }))
+      setCounts((prev) => ({ ...prev, users: snap.size })),
     );
 
     const unsubAdmins = onSnapshot(collection(db, "Admin"), (snap) =>
-      setCounts((prev) => ({ ...prev, users: prev.users + snap.size }))
+      setCounts((prev) => ({ ...prev, users: prev.users + snap.size })),
     );
 
     const unsubEnrollees = onSnapshot(collection(db, "Schedules"), (snap) =>
-      setCounts((prev) => ({ ...prev, enrollees: snap.size }))
+      setCounts((prev) => ({ ...prev, enrollees: snap.size })),
     );
 
     const unsubFacilities = onSnapshot(
       collection(db, "FacilitiesInbox"),
-      (snap) => setCounts((prev) => ({ ...prev, facilities: snap.size }))
+      (snap) => setCounts((prev) => ({ ...prev, facilities: snap.size })),
     );
 
-    const unsubReports = onSnapshot(collection(db, "Reports"), (snap) =>
-      setCounts((prev) => ({ ...prev, reports: snap.size }))
+    // Track all reports in all Admin subcollections in real-time
+    const unsubReports = onSnapshot(collectionGroup(db, "reports"), (snap) =>
+      setCounts((prev) => ({ ...prev, reports: snap.size })),
     );
 
     return () => {
@@ -365,7 +377,6 @@ const SuperAdminDashboard = () => {
         return (
           <>
             <HeaderBar title="SuperAdmin Dashboard" />
-
             <section className="ad-stats">
               <Stat
                 title="Users"
@@ -436,9 +447,7 @@ const SuperAdminDashboard = () => {
                   colors={["#6366f1", "#10b981", "#f59e0b"]}
                   size={220}
                   centerText={{
-                    title: `${
-                      counts.users + counts.facilities + counts.reports
-                    }`,
+                    title: `${counts.users + counts.facilities + counts.reports}`,
                     subtitle: "Total Items",
                   }}
                 />

@@ -1,7 +1,15 @@
-import React from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import "../AdminDashboard.css";
 import { IconSearch, IconEye, IconCheck } from "../icons";
-import { DUMMY_REPORTS, DUMMY_CLIENT_REPORTS } from "../data";
+import {
+  collectionGroup,
+  onSnapshot,
+  updateDoc,
+  doc,
+  deleteDoc,
+} from "firebase/firestore";
+import { db } from "../service/firebase";
+
 const SearchBox = ({ placeholder, value, onChange }) => (
   <div className="ad-search">
     <span className="ad-search-ico" aria-hidden>
@@ -17,515 +25,331 @@ const SearchBox = ({ placeholder, value, onChange }) => (
 );
 
 const Reports = () => {
-  const [query, setQuery] = React.useState("");
-  const [queryClients, setQueryClients] = React.useState("");
-  const [reportsA, setReportsA] = React.useState(DUMMY_REPORTS);
-  const [reportsC, setReportsC] = React.useState(DUMMY_CLIENT_REPORTS);
-  const [confirmResolveA, setConfirmResolveA] = React.useState(null);
-  const [confirmResolveC, setConfirmResolveC] = React.useState(null);
-  // Sorting state
-  const [sortKeyA, setSortKeyA] = React.useState("created");
-  const [sortDirA, setSortDirA] = React.useState("desc");
-  const [sortKeyC, setSortKeyC] = React.useState("created");
-  const [sortDirC, setSortDirC] = React.useState("desc");
-  // Derived filters for Admin reports
-  const [statusA, setStatusA] = React.useState("All"); // All | Open | In Review | Resolved
-  const filtered = React.useMemo(() => {
-    const q = query.trim().toLowerCase();
-    let base = reportsA;
-    if (q)
-      base = base.filter(
-        (r) =>
-          r.title.toLowerCase().includes(q) ||
-          r.category.toLowerCase().includes(q) ||
-          r.from.toLowerCase().includes(q) ||
-          r.status.toLowerCase().includes(q)
-      );
-    if (statusA !== "All")
-      base = base.filter(
-        (r) => r.status.toLowerCase() === statusA.toLowerCase()
-      );
-    return base;
-  }, [reportsA, query, statusA]);
-  const sortedA = React.useMemo(() => {
-    const arr = [...filtered];
-    const dir = sortDirA === "asc" ? 1 : -1;
-    arr.sort((a, b) => {
-      const getVal = (o) =>
-        sortKeyA === "created"
-          ? new Date(o.created).getTime()
-          : String(o[sortKeyA] ?? "").toLowerCase();
-      const av = getVal(a),
-        bv = getVal(b);
-      if (av < bv) return -1 * dir;
-      if (av > bv) return 1 * dir;
-      return 0;
+  const [query, setQuery] = useState("");
+  const [reportsA, setReportsA] = useState([]);
+  const [confirmResolveA, setConfirmResolveA] = useState(null);
+  const [confirmDeleteA, setConfirmDeleteA] = useState(null);
+  const [viewReport, setViewReport] = useState(null); // For eye modal (title + desc + image)
+
+  const [sortKeyA, setSortKeyA] = useState("created");
+  const [sortDirA, setSortDirA] = useState("desc");
+  const [statusA, setStatusA] = useState("All");
+
+  // Load reports from all admins
+  useEffect(() => {
+    const q = collectionGroup(db, "reports");
+
+    const unsub = onSnapshot(q, (snap) => {
+      const list = snap.docs.map((d) => ({
+        id: d.id,
+        refPath: d.ref.path,
+        ...d.data(),
+      }));
+      setReportsA(list);
     });
-    return arr;
-  }, [filtered, sortKeyA, sortDirA]);
-  // Derived filters for Client reports
-  const [statusC, setStatusC] = React.useState("All");
-  const filteredClients = React.useMemo(() => {
-    const q = queryClients.trim().toLowerCase();
-    let base = reportsC;
-    if (q)
-      base = base.filter(
-        (r) =>
-          r.title.toLowerCase().includes(q) ||
-          r.category.toLowerCase().includes(q) ||
-          r.client.toLowerCase().includes(q) ||
-          r.status.toLowerCase().includes(q)
-      );
-    if (statusC !== "All")
-      base = base.filter(
-        (r) => r.status.toLowerCase() === statusC.toLowerCase()
-      );
-    return base;
-  }, [reportsC, queryClients, statusC]);
-  const sortedC = React.useMemo(() => {
-    const arr = [...filteredClients];
-    const dir = sortDirC === "asc" ? 1 : -1;
-    arr.sort((a, b) => {
-      const getVal = (o) =>
-        sortKeyC === "created"
-          ? new Date(o.created).getTime()
-          : String(o[sortKeyC] ?? "").toLowerCase();
-      const av = getVal(a),
-        bv = getVal(b);
-      if (av < bv) return -1 * dir;
-      if (av > bv) return 1 * dir;
-      return 0;
-    });
-    return arr;
-  }, [filteredClients, sortKeyC, sortDirC]);
-  const caret = (activeKey, key, dir) =>
-    activeKey === key ? (dir === "asc" ? " ▲" : " ▼") : "";
+
+    return () => unsub();
+  }, []);
 
   const statusClass = (status) => {
-    const s = String(status).toLowerCase();
+    const s = String(status || "open").toLowerCase();
     if (s === "open") return "ad-badge rose";
     if (s === "in review") return "ad-badge amber";
     if (s === "resolved") return "ad-badge emerald";
     return "ad-badge gray";
   };
 
-  const markResolvedA = (id) => {
-    setReportsA((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: "Resolved" } : r))
-    );
+  // Filter reports
+  const filtered = useMemo(() => {
+    const qStr = query.trim().toLowerCase();
+    let base = reportsA;
+
+    if (qStr) {
+      base = base.filter(
+        (r) =>
+          String(r.title || "")
+            .toLowerCase()
+            .includes(qStr) ||
+          String(r.from || "")
+            .toLowerCase()
+            .includes(qStr) ||
+          String(r.status || "")
+            .toLowerCase()
+            .includes(qStr),
+      );
+    }
+
+    if (statusA !== "All") {
+      base = base.filter(
+        (r) => String(r.status || "").toLowerCase() === statusA.toLowerCase(),
+      );
+    }
+
+    return base;
+  }, [reportsA, query, statusA]);
+
+  // Sort reports
+  const sortedA = useMemo(() => {
+    const arr = [...filtered];
+    const dir = sortDirA === "asc" ? 1 : -1;
+
+    arr.sort((a, b) => {
+      const av =
+        sortKeyA === "created"
+          ? new Date(a.created || 0).getTime()
+          : String(a[sortKeyA] || "").toLowerCase();
+      const bv =
+        sortKeyA === "created"
+          ? new Date(b.created || 0).getTime()
+          : String(b[sortKeyA] || "").toLowerCase();
+
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      return 0;
+    });
+
+    return arr;
+  }, [filtered, sortKeyA, sortDirA]);
+
+  const markResolvedA = async (report) => {
+    if (!report.refPath) return;
+    await updateDoc(doc(db, report.refPath), {
+      status: "Resolved",
+    });
     setConfirmResolveA(null);
   };
-  const markResolvedC = (id) => {
-    setReportsC((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: "Resolved" } : r))
-    );
-    setConfirmResolveC(null);
+
+  const deleteReportA = async (report) => {
+    if (!report.refPath) return;
+    await deleteDoc(doc(db, report.refPath));
+    setConfirmDeleteA(null);
   };
 
   return (
-    <>
-      <section className="ad-section">
-        <h2 className="ad-section-title">Reports (from Admin)</h2>
-        <SearchBox
-          placeholder="Search reports"
-          value={query}
-          onChange={setQuery}
-        />
-        <div
-          className="ad-filter-row"
-          role="group"
-          aria-label="Admin report filters"
-        >
-          <button
-            type="button"
-            className={`ad-chip ${statusA === "All" ? "active" : ""} gray`}
-            onClick={() => setStatusA("All")}
-          >
-            <span className="dot" />
-            All
-          </button>
-          <button
-            type="button"
-            className={`ad-chip ${statusA === "Open" ? "active" : ""} rose`}
-            onClick={() => setStatusA("Open")}
-          >
-            <span className="dot" />
-            Open
-          </button>
-          <button
-            type="button"
-            className={`ad-chip ${
-              statusA === "In Review" ? "active" : ""
-            } amber`}
-            onClick={() => setStatusA("In Review")}
-          >
-            <span className="dot" />
-            In Review
-          </button>
-          <button
-            type="button"
-            className={`ad-chip ${
-              statusA === "Resolved" ? "active" : ""
-            } emerald`}
-            onClick={() => setStatusA("Resolved")}
-          >
-            <span className="dot" />
-            Resolved
-          </button>
-        </div>
-        <div className="ad-table-card">
-          <table className="ad-table">
-            <thead>
-              <tr>
-                <th>
-                  <button
-                    type="button"
-                    className="ad-th-btn"
-                    onClick={() => {
-                      setSortDirA(
-                        sortKeyA === "title" && sortDirA === "asc"
-                          ? "desc"
-                          : "asc"
-                      );
-                      setSortKeyA("title");
-                    }}
-                  >
-                    Title{caret(sortKeyA, "title", sortDirA)}
-                  </button>
-                </th>
-                <th>
-                  <button
-                    type="button"
-                    className="ad-th-btn"
-                    onClick={() => {
-                      setSortDirA(
-                        sortKeyA === "from" && sortDirA === "asc"
-                          ? "desc"
-                          : "asc"
-                      );
-                      setSortKeyA("from");
-                    }}
-                  >
-                    From{caret(sortKeyA, "from", sortDirA)}
-                  </button>
-                </th>
-                <th>
-                  <button
-                    type="button"
-                    className="ad-th-btn"
-                    onClick={() => {
-                      setSortDirA(
-                        sortKeyA === "created" && sortDirA === "asc"
-                          ? "desc"
-                          : "asc"
-                      );
-                      setSortKeyA("created");
-                    }}
-                  >
-                    Created{caret(sortKeyA, "created", sortDirA)}
-                  </button>
-                </th>
-                <th>
-                  <button
-                    type="button"
-                    className="ad-th-btn"
-                    onClick={() => {
-                      setSortDirA(
-                        sortKeyA === "status" && sortDirA === "asc"
-                          ? "desc"
-                          : "asc"
-                      );
-                      setSortKeyA("status");
-                    }}
-                  >
-                    Status{caret(sortKeyA, "status", sortDirA)}
-                  </button>
-                </th>
-                <th className="ad-col-actions">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedA.map((r) => (
-                <tr key={r.id}>
-                  <td>{r.title}</td>
-                  <td>{r.from}</td>
-                  <td>{r.created}</td>
-                  <td>
-                    <span className={statusClass(r.status)}>{r.status}</span>
-                  </td>
-                  <td className="ad-actions">
-                    <button className="ad-icon-btn" title="View" type="button">
-                      <IconEye size={16} />
-                    </button>
-                    <button
-                      className="ad-icon-btn"
-                      title="Mark Resolved"
-                      type="button"
-                      onClick={() => setConfirmResolveA(r.id)}
-                    >
-                      <IconCheck size={16} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {confirmResolveA !== null && (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(0,0,0,.35)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 60,
-            }}
-          >
-            <div
-              style={{
-                width: 420,
-                maxWidth: "92vw",
-                background: "#fff",
-                borderRadius: 12,
-                boxShadow: "0 20px 40px rgba(0,0,0,.18)",
-                border: "1px solid #e5e7eb",
-              }}
-            >
-              <div style={{ padding: 16, borderBottom: "1px solid #eef2f7" }}>
-                <h3 style={{ margin: 0, fontSize: 18, color: "#111827" }}>
-                  Confirm Resolve
-                </h3>
-              </div>
-              <div style={{ padding: 16, color: "#374151" }}>
-                Mark this admin report as Resolved?
-              </div>
-              <div
-                className="ad-form-actions"
-                style={{ justifyContent: "flex-end", padding: 16 }}
-              >
-                <button
-                  className="ad-btn"
-                  type="button"
-                  onClick={() => setConfirmResolveA(null)}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="ad-btn ad-btn-primary"
-                  type="button"
-                  onClick={() => markResolvedA(confirmResolveA)}
-                >
-                  Confirm
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </section>
+    <section className="ad-section">
+      <h2 className="ad-section-title">Reports (from Admin)</h2>
 
-      <section className="ad-section">
-        <h2 className="ad-section-title">Reports (from Student/Parent)</h2>
-        <SearchBox
-          placeholder="Search client reports"
-          value={queryClients}
-          onChange={setQueryClients}
-        />
-        <div
-          className="ad-filter-row"
-          role="group"
-          aria-label="Client report filters"
-        >
+      <SearchBox
+        placeholder="Search reports"
+        value={query}
+        onChange={setQuery}
+      />
+
+      <div className="ad-filter-row">
+        {["All", "Open", "In Review", "Resolved"].map((s) => (
           <button
-            type="button"
-            className={`ad-chip ${statusC === "All" ? "active" : ""} gray`}
-            onClick={() => setStatusC("All")}
+            key={s}
+            className={`ad-chip ${statusA === s ? "active" : ""}`}
+            onClick={() => setStatusA(s)}
           >
             <span className="dot" />
-            All
+            {s}
           </button>
-          <button
-            type="button"
-            className={`ad-chip ${statusC === "Open" ? "active" : ""} rose`}
-            onClick={() => setStatusC("Open")}
-          >
-            <span className="dot" />
-            Open
-          </button>
-          <button
-            type="button"
-            className={`ad-chip ${
-              statusC === "In Review" ? "active" : ""
-            } amber`}
-            onClick={() => setStatusC("In Review")}
-          >
-            <span className="dot" />
-            In Review
-          </button>
-          <button
-            type="button"
-            className={`ad-chip ${
-              statusC === "Resolved" ? "active" : ""
-            } emerald`}
-            onClick={() => setStatusC("Resolved")}
-          >
-            <span className="dot" />
-            Resolved
-          </button>
-        </div>
-        <div className="ad-table-card">
-          <table className="ad-table">
-            <thead>
+        ))}
+      </div>
+
+      <div className="ad-table-card">
+        <table className="ad-table">
+          <thead>
+            <tr>
+              <th>
+                <button
+                  className="ad-th-btn"
+                  onClick={() => {
+                    setSortDirA(
+                      sortKeyA === "title" && sortDirA === "asc"
+                        ? "desc"
+                        : "asc",
+                    );
+                    setSortKeyA("title");
+                  }}
+                >
+                  Title
+                </button>
+              </th>
+              <th>From</th>
+              <th>
+                <button
+                  className="ad-th-btn"
+                  onClick={() => {
+                    setSortDirA(
+                      sortKeyA === "created" && sortDirA === "asc"
+                        ? "desc"
+                        : "asc",
+                    );
+                    setSortKeyA("created");
+                  }}
+                >
+                  Created
+                </button>
+              </th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {sortedA.length === 0 ? (
               <tr>
-                <th>
-                  <button
-                    type="button"
-                    className="ad-th-btn"
-                    onClick={() => {
-                      setSortDirC(
-                        sortKeyC === "title" && sortDirC === "asc"
-                          ? "desc"
-                          : "asc"
-                      );
-                      setSortKeyC("title");
-                    }}
-                  >
-                    Title{caret(sortKeyC, "title", sortDirC)}
-                  </button>
-                </th>
-                <th>
-                  <button
-                    type="button"
-                    className="ad-th-btn"
-                    onClick={() => {
-                      setSortDirC(
-                        sortKeyC === "client" && sortDirC === "asc"
-                          ? "desc"
-                          : "asc"
-                      );
-                      setSortKeyC("client");
-                    }}
-                  >
-                    Client{caret(sortKeyC, "client", sortDirC)}
-                  </button>
-                </th>
-                <th>
-                  <button
-                    type="button"
-                    className="ad-th-btn"
-                    onClick={() => {
-                      setSortDirC(
-                        sortKeyC === "created" && sortDirC === "asc"
-                          ? "desc"
-                          : "asc"
-                      );
-                      setSortKeyC("created");
-                    }}
-                  >
-                    Created{caret(sortKeyC, "created", sortDirC)}
-                  </button>
-                </th>
-                <th>
-                  <button
-                    type="button"
-                    className="ad-th-btn"
-                    onClick={() => {
-                      setSortDirC(
-                        sortKeyC === "status" && sortDirC === "asc"
-                          ? "desc"
-                          : "asc"
-                      );
-                      setSortKeyC("status");
-                    }}
-                  >
-                    Status{caret(sortKeyC, "status", sortDirC)}
-                  </button>
-                </th>
-                <th className="ad-col-actions">Actions</th>
+                <td colSpan={5} style={{ textAlign: "center", padding: 24 }}>
+                  No reports yet
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {sortedC.map((r) => (
+            ) : (
+              sortedA.map((r) => (
                 <tr key={r.id}>
-                  <td>{r.title}</td>
-                  <td>{r.client}</td>
-                  <td>{r.created}</td>
+                  <td>{r.title || "-"}</td>
+                  <td>{r.from || "-"}</td>
+                  <td>{r.created || "-"}</td>
                   <td>
-                    <span className={statusClass(r.status)}>{r.status}</span>
+                    <span className={statusClass(r.status)}>
+                      {r.status || "Open"}
+                    </span>
                   </td>
                   <td className="ad-actions">
-                    <button className="ad-icon-btn" title="View" type="button">
-                      <IconEye size={16} />
-                    </button>
+                    {/* View report (description + image) */}
                     <button
                       className="ad-icon-btn"
-                      title="Mark Resolved"
-                      type="button"
-                      onClick={() => setConfirmResolveC(r.id)}
+                      onClick={() => setViewReport(r)}
+                    >
+                      <IconEye size={16} />
+                    </button>
+
+                    {/* Mark resolved */}
+                    <button
+                      className="ad-icon-btn"
+                      onClick={() => setConfirmResolveA(r)}
                     >
                       <IconCheck size={16} />
                     </button>
+
+                    {/* Delete report */}
+                    <button
+                      className="ad-icon-btn"
+                      style={{ color: "red" }}
+                      onClick={() => setConfirmDeleteA(r)}
+                      title="Delete report"
+                    >
+                      🗑️
+                    </button>
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {confirmResolveC !== null && (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(0,0,0,.35)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 60,
-            }}
-          >
-            <div
-              style={{
-                width: 420,
-                maxWidth: "92vw",
-                background: "#fff",
-                borderRadius: 12,
-                boxShadow: "0 20px 40px rgba(0,0,0,.18)",
-                border: "1px solid #e5e7eb",
-              }}
-            >
-              <div style={{ padding: 16, borderBottom: "1px solid #eef2f7" }}>
-                <h3 style={{ margin: 0, fontSize: 18, color: "#111827" }}>
-                  Confirm Resolve
-                </h3>
-              </div>
-              <div style={{ padding: 16, color: "#374151" }}>
-                Mark this client report as Resolved?
-              </div>
-              <div
-                className="ad-form-actions"
-                style={{ justifyContent: "flex-end", padding: 16 }}
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Resolve confirmation modal */}
+      {confirmResolveA && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,.35)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <div style={{ background: "#fff", borderRadius: 12, width: 420 }}>
+            <div style={{ padding: 16 }}>Mark this report as Resolved?</div>
+            <div className="ad-form-actions" style={{ padding: 16 }}>
+              <button
+                className="ad-btn"
+                onClick={() => setConfirmResolveA(null)}
               >
-                <button
-                  className="ad-btn"
-                  type="button"
-                  onClick={() => setConfirmResolveC(null)}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="ad-btn ad-btn-primary"
-                  type="button"
-                  onClick={() => markResolvedC(confirmResolveC)}
-                >
-                  Confirm
-                </button>
-              </div>
+                Cancel
+              </button>
+              <button
+                className="ad-btn ad-btn-primary"
+                onClick={() => markResolvedA(confirmResolveA)}
+              >
+                Confirm
+              </button>
             </div>
           </div>
-        )}
-      </section>
-    </>
+        </div>
+      )}
+
+      {/* Delete confirmation modal */}
+      {confirmDeleteA && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,.35)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <div style={{ background: "#fff", borderRadius: 12, width: 420 }}>
+            <div style={{ padding: 16 }}>Delete this report permanently?</div>
+            <div className="ad-form-actions" style={{ padding: 16 }}>
+              <button
+                className="ad-btn"
+                onClick={() => setConfirmDeleteA(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="ad-btn ad-btn-primary"
+                style={{ backgroundColor: "red", color: "#fff" }}
+                onClick={() => deleteReportA(confirmDeleteA)}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Report modal */}
+      {viewReport && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: 16,
+          }}
+          onClick={() => setViewReport(null)}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              maxWidth: 600,
+              width: "100%",
+              maxHeight: "90%",
+              overflowY: "auto",
+              padding: 16,
+            }}
+            onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside
+          >
+            <h3 style={{ marginBottom: 8 }}>{viewReport.title}</h3>
+            <p style={{ marginBottom: 16 }}>{viewReport.description}</p>
+            {viewReport.image && (
+              <img
+                src={viewReport.image}
+                alt="Report attachment"
+                style={{ width: "100%", borderRadius: 8 }}
+              />
+            )}
+            <div style={{ textAlign: "right", marginTop: 12 }}>
+              <button className="ad-btn" onClick={() => setViewReport(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
   );
 };
 
