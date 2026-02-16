@@ -35,7 +35,7 @@
 .ad-menu-item.danger:hover { background:#fee2e2; border-color:#ef4444; }
 
 /* Stats */
-.ad-stats { display:grid; grid-template-columns:repeat(3, minmax(0, 220px)); gap:16px; margin:18px 0 10px; }
+.ad-stats { display:grid; grid-template-columns:repeat(7, minmax(0, 220px)); gap:16px; margin:18px 0 10px; }
 /* Card-style stat with floating badge */
 .ad-stat { position:relative; border-radius:14px; padding:18px 16px 16px 16px; border:1px solid rgba(15,23,42,.08); background:#fff; box-shadow: 0 2px 8px rgba(0,0,0,.06); transition: transform .15s ease, box-shadow .15s ease; }
 .ad-stat:hover { transform: translateY(-2px); box-shadow: 0 8px 18px rgba(0,0,0,.10); }
@@ -45,8 +45,14 @@
 .ad-stat-badge.blue { background: linear-gradient(180deg, #3b82f6, #2563eb); }
 .ad-stat-badge.amber { background: linear-gradient(180deg, #f59e0b, #d97706); }
 .ad-stat-badge.emerald { background: linear-gradient(180deg, #10b981, #059669); }
+.ad-stat-badge.violet { background: linear-gradient(180deg, #ffe600, #ffe600); }
 .ad-stat-title { font-size:13px; color:#6b7280; margin-left:72px; }
 .ad-stat-value { font-size:26px; font-weight:800; color:#0f172a; margin-left:72px; }
+
+/* Clickable stat cards (used for category filters in Users) */
+.ad-stat.ad-stat-click { width:100%; text-align:left; cursor:pointer; border:none; }
+.ad-stat.ad-stat-click:focus { outline:none; box-shadow:0 0 0 3px rgba(59,130,246,.22), 0 8px 18px rgba(0,0,0,.10); }
+.ad-stat.ad-stat-click.active { box-shadow:0 0 0 3px rgba(59,130,246,.22), 0 8px 18px rgba(0,0,0,.10); border:1px solid rgba(59,130,246,.35); }
 
 /* Sections */
 .ad-section { margin-top:20px; }
@@ -125,6 +131,9 @@ select.ad-input { appearance:none; -moz-appearance:none; -webkit-appearance:none
   .ad-stats { grid-template-columns:1fr; }
   .ad-qa-grid { grid-template-columns:1fr; }
   .ad-form-grid { grid-template-columns: 1fr; gap:16px; }
+}
+.ad-stat-badge.rose {
+  background: linear-gradient(180deg, #f43f5e, #e11d48);
 }
 
 /* Facilities page */

@@ -20,6 +20,28 @@ import { auth, db } from "../service/firebase";
 import { collection, onSnapshot, collectionGroup } from "firebase/firestore";
 import Approval from "./approval";
 
+/**
+ * COLOR SYSTEM (matches your AdminDashboard.css)
+ * - indigo: #6366f1
+ * - blue/cyan: #2563eb
+ * - emerald: #10b981
+ * - amber: #f59e0b
+ * - rose: #f43f5e
+ * - purple: #7c3aed (chips)
+ *
+ * NOTE: your CSS "violet" stat badge is currently yellow (#ffe600),
+ * so for "Pending Email" we use "blue" to keep charts + badges consistent.
+ */
+const COLORS = {
+  indigo: "#6366f1",
+  blue: "#2563eb",
+  emerald: "#10b981",
+  amber: "#f59e0b",
+  rose: "#f43f5e",
+  slate: "#94a3b8",
+  purple: "#7c3aed",
+};
+
 // Placeholder for FacilitiesInbox if not yet implemented
 const FacilitiesInbox = () => (
   <div style={{ padding: 24, textAlign: "center" }}>
@@ -68,6 +90,31 @@ const Sidebar = ({ route, counts }) => {
             <IconCalendar size={20} stroke="#eaf2ff" />
           </span>
           <span>Users</span>
+
+          {/* Badge: show pending admin approvals as attention signal */}
+          {counts.pendingAdmin > 0 && (
+            <span style={{ marginLeft: "auto" }}>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minWidth: 18,
+                  height: 18,
+                  padding: "0 6px",
+                  background: COLORS.rose,
+                  color: "#fff",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  borderRadius: 999,
+                  boxShadow: "0 1px 2px rgba(0,0,0,.15)",
+                }}
+                title="Pending admin approval"
+              >
+                {counts.pendingAdmin}
+              </span>
+            </span>
+          )}
         </a>
 
         <a className={isActive("#/su/enrollees")} href="#/su/enrollees">
@@ -85,7 +132,7 @@ const Sidebar = ({ route, counts }) => {
                   minWidth: 18,
                   height: 18,
                   padding: "0 6px",
-                  background: "#ef4444",
+                  background: COLORS.rose,
                   color: "#fff",
                   fontSize: 11,
                   fontWeight: 700,
@@ -121,7 +168,7 @@ const Sidebar = ({ route, counts }) => {
                   minWidth: 18,
                   height: 18,
                   padding: "0 6px",
-                  background: "#10b981",
+                  background: COLORS.emerald,
                   color: "#fff",
                   fontSize: 11,
                   fontWeight: 700,
@@ -135,7 +182,6 @@ const Sidebar = ({ route, counts }) => {
           )}
         </a>
 
-        {/* approval */}
         <a className={isActive("#/su/approval")} href="#/su/approval">
           <span className="ad-nav-ico">
             <IconReport size={20} stroke="#eaf2ff" />
@@ -158,7 +204,7 @@ const Sidebar = ({ route, counts }) => {
                   minWidth: 18,
                   height: 18,
                   padding: "0 6px",
-                  background: "#f59e0b",
+                  background: COLORS.amber,
                   color: "#111827",
                   fontSize: 11,
                   fontWeight: 800,
@@ -215,8 +261,15 @@ const QuickAction = ({ title, desc, icon, href, variant = "indigo" }) => (
   </button>
 );
 
-// Donut Chart Component
-const DonutChart = ({ data, colors, size = 220, hole = 0.62, centerText }) => {
+// Donut Chart Component (used for Status only)
+const DonutChart = ({
+  data,
+  colors,
+  size = 220,
+  hole = 0.62,
+  centerText,
+  ariaLabel = "Distribution",
+}) => {
   const total = data.reduce((a, b) => a + b, 0) || 1;
   let acc = 0;
 
@@ -240,7 +293,7 @@ const DonutChart = ({ data, colors, size = 220, hole = 0.62, centerText }) => {
         position: "relative",
         boxShadow: "0 4px 12px rgba(0,0,0,.08)",
       }}
-      aria-label="Overview distribution"
+      aria-label={ariaLabel}
     >
       <div
         style={{
@@ -277,14 +330,95 @@ const DonutChart = ({ data, colors, size = 220, hole = 0.62, centerText }) => {
   );
 };
 
+const RowLegend = ({ label, color, value }) => (
+  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+    <span
+      style={{
+        width: 12,
+        height: 12,
+        background: color,
+        borderRadius: 3,
+      }}
+    />
+    <span style={{ color: "#111827", fontWeight: 600 }}>{label}</span>
+    <span style={{ color: "#6b7280" }}>({value})</span>
+  </div>
+);
+
+// Role distribution (Horizontal Bars)
+const RoleBars = ({ total, items }) => {
+  const safeTotal = Math.max(1, Number(total) || 0);
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      {items.map((it) => {
+        const pct = Math.round((it.value / safeTotal) * 100);
+        const width = Math.min(
+          100,
+          Math.max(0, (Number(it.value || 0) / safeTotal) * 100),
+        );
+
+        return (
+          <div key={it.label} style={{ display: "grid", gap: 6 }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <div style={{ fontWeight: 700, color: "#111827" }}>
+                {it.label}
+              </div>
+              <div style={{ color: "#6b7280", fontWeight: 700 }}>
+                {it.value} <span style={{ fontWeight: 600 }}>({pct}%)</span>
+              </div>
+            </div>
+
+            <div
+              style={{
+                height: 10,
+                borderRadius: 999,
+                background: "#eef2f7",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  height: "100%",
+                  width: `${width}%`,
+                  background: it.color,
+                  borderRadius: 999,
+                }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 // SuperAdminDashboard Component
 const SuperAdminDashboard = () => {
   const [route, setRoute] = React.useState(
     window.location.hash || "#/su/dashboard",
   );
   const [authenticated, setAuthenticated] = React.useState(false);
+
   const [counts, setCounts] = React.useState({
+    // total USERS should be only from "users" collection
     users: 0,
+
+    // admins separately (does not affect total users)
+    admins: 0,
+
+    // role analytics (users collection)
+    students: 0,
+    parents: 0,
+    others: 0,
+
+    // status analytics (users collection)
+    pendingEmail: 0,
+    pendingAdmin: 0,
+    approved: 0,
+    rejected: 0,
+
+    // other collections
     enrollees: 0,
     facilities: 0,
     reports: 0,
@@ -304,25 +438,79 @@ const SuperAdminDashboard = () => {
     window.addEventListener("hashchange", onHashChange);
     if (!window.location.hash) window.location.hash = "#/su/dashboard";
 
-    // Realtime counts
-    const unsubUsers = onSnapshot(collection(db, "users"), (snap) =>
-      setCounts((prev) => ({ ...prev, users: snap.size })),
-    );
+    // --- Realtime: USERS collection (roles + statuses)
+    const unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
+      let students = 0;
+      let parents = 0;
+      let others = 0;
 
+      let pendingEmail = 0;
+      let pendingAdmin = 0;
+      let approved = 0;
+      let rejected = 0;
+
+      snap.forEach((d) => {
+        const data = d.data() || {};
+        const role = String(data.role || "").toLowerCase().trim();
+        const status = String(data.status || "").toLowerCase().trim();
+
+        const emailVerified = data.emailVerified === true;
+        const adminApproved = data.adminApproved === true;
+
+        // roles
+        if (role === "student") students += 1;
+        else if (role === "parents" || role === "parent") parents += 1;
+        else others += 1;
+
+        // status buckets
+        if (status === "rejected") {
+          rejected += 1;
+          return;
+        }
+
+        if (!emailVerified) {
+          pendingEmail += 1;
+          return;
+        }
+
+        if (!adminApproved || status === "pending_admin") {
+          pendingAdmin += 1;
+          return;
+        }
+
+        approved += 1;
+      });
+
+      setCounts((prev) => ({
+        ...prev,
+        users: snap.size,
+        students,
+        parents,
+        others,
+        pendingEmail,
+        pendingAdmin,
+        approved,
+        rejected,
+      }));
+    });
+
+    // --- Realtime: Admin collection (separate)
     const unsubAdmins = onSnapshot(collection(db, "Admin"), (snap) =>
-      setCounts((prev) => ({ ...prev, users: prev.users + snap.size })),
+      setCounts((prev) => ({ ...prev, admins: snap.size })),
     );
 
+    // --- Realtime: Enrollees
     const unsubEnrollees = onSnapshot(collection(db, "Schedules"), (snap) =>
       setCounts((prev) => ({ ...prev, enrollees: snap.size })),
     );
 
+    // --- Realtime: Facilities inbox
     const unsubFacilities = onSnapshot(
       collection(db, "FacilitiesInbox"),
       (snap) => setCounts((prev) => ({ ...prev, facilities: snap.size })),
     );
 
-    // Track all reports in all Admin subcollections in real-time
+    // --- Realtime: Reports (collectionGroup)
     const unsubReports = onSnapshot(collectionGroup(db, "reports"), (snap) =>
       setCounts((prev) => ({ ...prev, reports: snap.size })),
     );
@@ -373,13 +561,15 @@ const SuperAdminDashboard = () => {
             <FacilitiesInbox />
           </>
         );
+
       case "#/su/approval":
         return (
           <>
-            <HeaderBar title="approval" />
+            <HeaderBar title="Approval" />
             <Approval />
           </>
         );
+
       case "#/su/reports":
         return (
           <>
@@ -388,16 +578,56 @@ const SuperAdminDashboard = () => {
           </>
         );
 
-      default:
+      default: {
+        const statusTotal =
+          counts.approved +
+          counts.pendingAdmin +
+          counts.pendingEmail +
+          counts.rejected;
+
+        // Graph palette (consistent everywhere)
+        const STATUS_COLORS = [
+          COLORS.emerald, // Approved
+          COLORS.amber,   // Pending Admin
+          COLORS.blue,    // Pending Email
+          COLORS.rose,    // Rejected
+        ];
+
         return (
           <>
             <HeaderBar title="SuperAdmin Dashboard" />
+
+            {/* MAIN STATS */}
             <section className="ad-stats">
               <Stat
-                title="Users"
+                title="Total Users"
                 value={counts.users}
                 icon={<IconCalendar />}
                 variant="indigo"
+              />
+              <Stat
+                title="Pending Admin Approval"
+                value={counts.pendingAdmin}
+                icon={<IconMail />}
+                variant="amber"
+              />
+              <Stat
+                title="Pending Email Verification"
+                value={counts.pendingEmail}
+                icon={<IconMail />}
+                variant="blue"
+              />
+              <Stat
+                title="Approved Users"
+                value={counts.approved}
+                icon={<IconCalendar />}
+                variant="emerald"
+              />
+              <Stat
+                title="Rejected Users"
+                value={counts.rejected}
+                icon={<IconReport />}
+                variant="rose"
               />
               <Stat
                 title="Facilities Inbox"
@@ -413,6 +643,7 @@ const SuperAdminDashboard = () => {
               />
             </section>
 
+            {/* Quick Actions */}
             <section className="ad-section">
               <h2 className="ad-section-title">Quick Actions</h2>
               <div className="ad-qa-grid">
@@ -422,6 +653,13 @@ const SuperAdminDashboard = () => {
                   icon={<IconCalendar stroke="#fff" />}
                   href="#/su/users"
                   variant="indigo"
+                />
+                <QuickAction
+                  title="Approval"
+                  desc="Review ID approvals"
+                  icon={<IconReport stroke="#fff" />}
+                  href="#/su/approval"
+                  variant="amber"
                 />
                 <QuickAction
                   title="Facilities Inbox"
@@ -447,84 +685,124 @@ const SuperAdminDashboard = () => {
               </div>
             </section>
 
+            {/* Analytics */}
             <section className="ad-section">
-              <h2 className="ad-section-title">Overview</h2>
+              <h2 className="ad-section-title">Analytics</h2>
+
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "minmax(220px, 260px) 1fr",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
                   gap: 16,
-                  alignItems: "center",
                 }}
               >
-                <DonutChart
-                  data={[counts.users, counts.facilities, counts.reports]}
-                  colors={["#6366f1", "#10b981", "#f59e0b"]}
-                  size={220}
-                  centerText={{
-                    title: `${counts.users + counts.facilities + counts.reports}`,
-                    subtitle: "Total Items",
+                {/* Status distribution (Donut) */}
+                <div
+                  style={{
+                    background: "#fff",
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 16,
+                    padding: 16,
+                    boxShadow: "0 4px 12px rgba(0,0,0,.04)",
                   }}
-                />
-
-                <div style={{ display: "grid", gap: 8 }}>
+                >
                   <div
-                    style={{ display: "flex", alignItems: "center", gap: 10 }}
+                    style={{
+                      fontWeight: 800,
+                      color: "#111827",
+                      marginBottom: 10,
+                    }}
                   >
-                    <span
-                      style={{
-                        width: 12,
-                        height: 12,
-                        background: "#6366f1",
-                        borderRadius: 3,
-                      }}
-                    />
-                    <span style={{ color: "#111827", fontWeight: 600 }}>
-                      Users
-                    </span>
-                    <span style={{ color: "#6b7280" }}>({counts.users})</span>
+                    User Status Distribution
                   </div>
 
                   <div
-                    style={{ display: "flex", alignItems: "center", gap: 10 }}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "minmax(220px, 260px) 1fr",
+                      gap: 16,
+                      alignItems: "center",
+                    }}
                   >
-                    <span
-                      style={{
-                        width: 12,
-                        height: 12,
-                        background: "#10b981",
-                        borderRadius: 3,
+                    <DonutChart
+                      data={[
+                        counts.approved,
+                        counts.pendingAdmin,
+                        counts.pendingEmail,
+                        counts.rejected,
+                      ]}
+                      colors={STATUS_COLORS}
+                      size={220}
+                      centerText={{
+                        title: `${statusTotal || 0}`,
+                        subtitle: "Total Users",
                       }}
+                      ariaLabel="User status distribution"
                     />
-                    <span style={{ color: "#111827", fontWeight: 600 }}>
-                      Facilities Inbox
-                    </span>
-                    <span style={{ color: "#6b7280" }}>
-                      ({counts.facilities})
-                    </span>
+
+                    <div style={{ display: "grid", gap: 8 }}>
+                      <RowLegend
+                        label="Approved"
+                        color={COLORS.emerald}
+                        value={counts.approved}
+                      />
+                      <RowLegend
+                        label="Pending Admin"
+                        color={COLORS.amber}
+                        value={counts.pendingAdmin}
+                      />
+                      <RowLegend
+                        label="Pending Email"
+                        color={COLORS.blue}
+                        value={counts.pendingEmail}
+                      />
+                      <RowLegend
+                        label="Rejected"
+                        color={COLORS.rose}
+                        value={counts.rejected}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Role distribution (Horizontal Bars) */}
+                <div
+                  style={{
+                    background: "#fff",
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 16,
+                    padding: 16,
+                    boxShadow: "0 4px 12px rgba(0,0,0,.04)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontWeight: 800,
+                      color: "#111827",
+                      marginBottom: 10,
+                    }}
+                  >
+                    User Role Distribution
                   </div>
 
-                  <div
-                    style={{ display: "flex", alignItems: "center", gap: 10 }}
-                  >
-                    <span
-                      style={{
-                        width: 12,
-                        height: 12,
-                        background: "#f59e0b",
-                        borderRadius: 3,
-                      }}
-                    />
-                    <span style={{ color: "#111827", fontWeight: 600 }}>
-                      Reports
-                    </span>
-                    <span style={{ color: "#6b7280" }}>({counts.reports})</span>
+                  <RoleBars
+                    total={counts.users}
+                    items={[
+                      { label: "Students", value: counts.students, color: COLORS.indigo },
+                      { label: "Parents", value: counts.parents, color: COLORS.emerald },
+                      { label: "Other", value: counts.others, color: COLORS.slate },
+                    ]}
+                  />
+
+                  <div style={{ marginTop: 10, color: "#6b7280", fontSize: 12 }}>
+                    Admins are counted separately: <b>{counts.admins}</b>
                   </div>
                 </div>
               </div>
             </section>
           </>
         );
+      }
     }
   };
 
