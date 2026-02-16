@@ -18,6 +18,7 @@ import LogoutMenu from "./LogoutMenu";
 
 import { auth, db } from "../service/firebase";
 import { collection, onSnapshot, collectionGroup } from "firebase/firestore";
+import Approval from "./approval";
 
 // Placeholder for FacilitiesInbox if not yet implemented
 const FacilitiesInbox = () => (
@@ -132,6 +133,14 @@ const Sidebar = ({ route, counts }) => {
               </span>
             </span>
           )}
+        </a>
+
+        {/* approval */}
+        <a className={isActive("#/su/approval")} href="#/su/approval">
+          <span className="ad-nav-ico">
+            <IconReport size={20} stroke="#eaf2ff" />
+          </span>
+          <span>Approval</span>
         </a>
 
         <a className={isActive("#/su/reports")} href="#/su/reports">
@@ -364,7 +373,13 @@ const SuperAdminDashboard = () => {
             <FacilitiesInbox />
           </>
         );
-
+      case "#/su/approval":
+        return (
+          <>
+            <HeaderBar title="approval" />
+            <Approval />
+          </>
+        );
       case "#/su/reports":
         return (
           <>
