@@ -28,9 +28,7 @@ import Approval from "./approval";
  * - amber: #f59e0b
  * - rose: #f43f5e
  * - purple: #7c3aed (chips)
- *
- * NOTE: your CSS "violet" stat badge is currently yellow (#ffe600),
- * so for "Pending Email" we use "blue" to keep charts + badges consistent.
+ 
  */
 const COLORS = {
   indigo: "#6366f1",

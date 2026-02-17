@@ -10,6 +10,13 @@ import {
   updateDoc,
   serverTimestamp,
   addDoc,
+
+  // ✅ added for cascade cleanup
+  query,
+  where,
+  getDocs,
+  writeBatch,
+  arrayRemove,
 } from "firebase/firestore";
 import { getFunctions, httpsCallable } from "firebase/functions";
 
@@ -45,7 +52,6 @@ const isApprovedUser = (u) =>
   !isRejectedUser(u) &&
   u.emailVerified === true &&
   u.adminApproved === true;
-
 
 // Search input component
 const SearchBox = ({ placeholder, value, onChange }) => (
@@ -125,7 +131,7 @@ const CategoryStat = ({
 
 const Users = () => {
   const [items, setItems] = React.useState([]);
-  const [query, setQuery] = React.useState("");
+  const [queryText, setQueryText] = React.useState("");
 
   const [viewUser, setViewUser] = React.useState(null);
   const [isApproving, setIsApproving] = React.useState(false);
@@ -148,7 +154,6 @@ const Users = () => {
   // Delete confirmation (id + optional context)
   const [confirmDelete, setConfirmDelete] = React.useState(null); // { id, from: 'main'|'rejected' }
 
-
   // ID preview (zoom/pan)
   const [previewImage, setPreviewImage] = React.useState(null);
   const [zoom, setZoom] = React.useState(1);
@@ -170,8 +175,6 @@ const Users = () => {
     danger = false,
     onConfirm,
   }) => setConfirm({ title, message, confirmText, danger, onConfirm });
-
-  // --- ROLE NORMALIZATION HELPERS (FIX PARENTS COUNT) ---
 
   // Fetch real-time data from Firestore
   React.useEffect(() => {
@@ -198,6 +201,11 @@ const Users = () => {
           adminApproved: true,
           status: "approved",
           rejected: false,
+
+          // who added the parent (only for parents)
+          addedByStudentUid: "",
+          addedByStudentName: "",
+          addedByStudentEmail: "",
         };
       });
 
@@ -211,7 +219,6 @@ const Users = () => {
             "(No name)";
 
           const statusLower = String(d.status || "").toLowerCase().trim();
-
           const role = normalizeRole(d.role || "student");
 
           return {
@@ -232,6 +239,12 @@ const Users = () => {
             emailVerified: d.emailVerified === true,
             adminApproved: d.adminApproved === true,
             status: d.status || "",
+
+            // who added the parent (only meaningful when role=parent)
+            addedByStudentUid: d.addedByStudentUid || "",
+            addedByStudentName: d.addedByStudentName || "",
+            addedByStudentEmail: d.addedByStudentEmail || "",
+
             rejected: statusLower === "rejected" || d.rejected === true,
           };
         });
@@ -245,78 +258,62 @@ const Users = () => {
     return () => unsubscribeAdmin();
   }, []);
 
-
   const rejectedUsers = React.useMemo(() => {
     return items.filter((u) => !isAdmin(u) && isRejectedUser(u));
   }, [items]);
 
   // Main list: always exclude rejected users
   const filtered = React.useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = queryText.trim().toLowerCase();
     return items.filter((u) => {
       if (isRejectedUser(u)) return false; // ALWAYS hidden in main table
 
-      // Search filtering
       if (!q) return true;
       const name = String(u.name || "").toLowerCase();
       const email = String(u.email || "").toLowerCase();
       const role = String(u.role || "").toLowerCase();
       const status = String(u.status || "").toLowerCase();
-      return name.includes(q) || email.includes(q) || role.includes(q) || status.includes(q);
+      return (
+        name.includes(q) ||
+        email.includes(q) ||
+        role.includes(q) ||
+        status.includes(q)
+      );
     });
-  }, [items, query]);
+  }, [items, queryText]);
 
   const filteredByRole = React.useMemo(() => {
     if (roleFilter === "all") return filtered;
 
-    if (roleFilter === "parents") {
-      return filtered.filter((u) => isParent(u));
-    }
+    if (roleFilter === "parents") return filtered.filter((u) => isParent(u));
+    if (roleFilter === "admin") return filtered.filter((u) => isAdmin(u));
+    if (roleFilter === "student") return filtered.filter((u) => isStudent(u));
 
-    if (roleFilter === "admin") {
-      return filtered.filter((u) => isAdmin(u));
-    }
-
-    if (roleFilter === "student") {
-      return filtered.filter((u) => isStudent(u));
-    }
-
-    // fallback exact match
     return filtered.filter(
-      (u) => String(u.role || "").toLowerCase().trim() === String(roleFilter).toLowerCase().trim()
+      (u) =>
+        String(u.role || "").toLowerCase().trim() ===
+        String(roleFilter).toLowerCase().trim()
     );
   }, [filtered, roleFilter]);
 
-  // Apply status/category filter after role filter
   const filteredByRoleAndStatus = React.useMemo(() => {
     if (statusFilter === "all") return filteredByRole;
-
-    if (statusFilter === "pendingEmail") {
+    if (statusFilter === "pendingEmail")
       return filteredByRole.filter((u) => isPendingEmail(u));
-    }
-    if (statusFilter === "pendingAdmin") {
+    if (statusFilter === "pendingAdmin")
       return filteredByRole.filter((u) => isPendingAdmin(u));
-    }
-    if (statusFilter === "approved") {
+    if (statusFilter === "approved")
       return filteredByRole.filter((u) => isApprovedUser(u));
-    }
-
     return filteredByRole;
   }, [filteredByRole, statusFilter]);
 
-  // Dashboard category counts (always exclude rejected; counts are based on the current search query)
+  // Dashboard counts
   const totalActiveCount = React.useMemo(() => filtered.length, [filtered]);
-
   const adminsCount = React.useMemo(() => filtered.filter((u) => isAdmin(u)).length, [filtered]);
-
   const studentsCount = React.useMemo(() => filtered.filter((u) => isStudent(u)).length, [filtered]);
-
   const parentsCount = React.useMemo(() => filtered.filter((u) => isParent(u)).length, [filtered]);
-
   const pendingEmailCount = React.useMemo(() => filtered.filter((u) => isPendingEmail(u)).length, [filtered]);
-
   const pendingAdminCount = React.useMemo(() => filtered.filter((u) => isPendingAdmin(u)).length, [filtered]);
-
   const approvedCount = React.useMemo(() => filtered.filter((u) => isApprovedUser(u)).length, [filtered]);
 
   const sorted = React.useMemo(() => {
@@ -346,7 +343,8 @@ const Users = () => {
     }
   };
 
-  const caret = (key) => (sortKey === key ? (sortDir === "asc" ? " ▲" : " ▼") : "");
+  const caret = (key) =>
+    sortKey === key ? (sortDir === "asc" ? " ▲" : " ▼") : "";
 
   const roleClass = (role) => {
     const r = normalizeRole(role);
@@ -398,7 +396,37 @@ const Users = () => {
     }
   };
 
-  // Delete user (Cloud Function first; Firestore fallback)
+  // ✅ Cascade cleanup helper:
+  // When deleting a parent, remove parent UID from all students.linkedParents (prevents student Inbox stuck)
+  const cleanupParentLinks = async (parentUid) => {
+    if (!parentUid) return;
+    try {
+      const q = query(collection(db, "users"), where("linkedParents", "array-contains", parentUid));
+      const snap = await getDocs(q);
+      if (snap.empty) return;
+
+      let batch = writeBatch(db);
+      let count = 0;
+
+      for (const d of snap.docs) {
+        batch.update(d.ref, { linkedParents: arrayRemove(parentUid) });
+        count++;
+
+        if (count >= 450) {
+          await batch.commit();
+          batch = writeBatch(db);
+          count = 0;
+        }
+      }
+
+      if (count > 0) await batch.commit();
+    } catch (e) {
+      console.error("cleanupParentLinks error:", e);
+      // do not throw; still proceed with deletion
+    }
+  };
+
+  // ✅ Delete user (Cloud Function first; Firestore fallback) + parent link cleanup
   const doDelete = async (id) => {
     try {
       const user = items.find((u) => u.id === id);
@@ -407,15 +435,20 @@ const Users = () => {
         return;
       }
 
+      const uid = user.uid || user.id;
+      const role = normalizeRole(user.role || "student");
+
+      // ✅ If deleting a parent, cleanup linkedParents in student docs first
+      if (role === "parents") {
+        await cleanupParentLinks(uid);
+      }
+
       const callable = getCallable();
 
       // Try full deletion first (Firestore + Auth + Storage)
       if (callable?.deleteUserCompletely) {
         try {
-          await callable.deleteUserCompletely({
-            uid: user.uid || user.id,
-            role: normalizeRole(user.role || "student"),
-          });
+          await callable.deleteUserCompletely({ uid, role });
           setConfirmDelete(null);
           return;
         } catch (err) {
@@ -430,7 +463,9 @@ const Users = () => {
 
       showNotice(
         "Deleted (Firestore only)",
-        "The Firestore record was deleted. Note: the Firebase Auth account (email reuse) and Storage ID image are NOT deleted unless you deploy the Cloud Function deleteUserCompletely."
+        role === "parents"
+          ? "Parent was deleted and student links were cleaned up. Students will not be stuck on Inbox loading."
+          : "The Firestore record was deleted. Note: the Firebase Auth account (email reuse) and Storage ID image are NOT deleted unless you deploy the Cloud Function deleteUserCompletely."
       );
     } catch (error) {
       console.error("Error deleting user:", error);
@@ -438,11 +473,11 @@ const Users = () => {
     }
   };
 
-  // Approve student (admin confirms ID)
-  const approveStudent = async (u) => {
+  // Approve user (student/parent)
+  const approveUser = async (u) => {
     if (!u) return;
     if (isAdmin(u)) return;
-    if (!isStudent(u)) return;
+    if (!(isStudent(u) || isParent(u))) return;
 
     if (isRejectedUser(u)) {
       showNotice("Not allowed", "This user is already rejected. Approval is disabled.");
@@ -450,7 +485,7 @@ const Users = () => {
     }
 
     if (u.emailVerified !== true) {
-      showNotice("Not allowed", "Cannot approve: student email is not verified yet.");
+      showNotice("Not allowed", "Cannot approve: email is not verified yet.");
       return;
     }
 
@@ -493,7 +528,7 @@ const Users = () => {
   };
 
   // Execute rejection (called only after confirm modal)
-  const rejectStudentConfirmed = async (u) => {
+  const rejectUserConfirmed = async (u) => {
     try {
       setIsApproving(true);
 
@@ -512,7 +547,7 @@ const Users = () => {
             message: {
               subject: "Your account verification was rejected",
               text:
-                "Your submitted ID was rejected during verification. You may sign up again using the same email once your previous account is fully removed by the administrator.",
+                "Your submitted verification was rejected during review. You may sign up again using the same email once your previous account is fully removed by the administrator.",
             },
           });
         }
@@ -539,7 +574,9 @@ const Users = () => {
         );
       }
 
-      setViewUser((prev) => (prev ? { ...prev, adminApproved: false, status: "rejected", rejected: true } : prev));
+      setViewUser((prev) =>
+        prev ? { ...prev, adminApproved: false, status: "rejected", rejected: true } : prev
+      );
     } catch (e) {
       console.error("Reject failed:", e);
       showNotice("Reject failed", "Failed to reject user. Please try again.");
@@ -548,45 +585,48 @@ const Users = () => {
     }
   };
 
-  // Reject student (opens confirm modal instead of window.confirm)
-  const rejectStudent = async (u) => {
+  // Reject user (opens confirm modal instead of window.confirm)
+  const rejectUser = async (u) => {
     if (!u) return;
     if (isAdmin(u)) return;
-    if (!isStudent(u)) return;
+    if (!(isStudent(u) || isParent(u))) return;
 
     if (u.emailVerified !== true) {
-      showNotice("Not allowed", "Cannot reject: student email is not verified yet.");
+      showNotice("Not allowed", "Cannot reject: email is not verified yet.");
       return;
     }
 
     if (isRejectedUser(u)) return;
 
     showConfirm({
-      title: "Reject student ID",
+      title: isParent(u) ? "Reject parent account" : "Reject student ID",
       message:
-        "Reject this student ID?\n\nThis will tag the record as rejected.\n\nTo allow the same Gmail to sign up again, the Firebase Auth account must be deleted (requires Cloud Function adminDeleteAuthUserByUid).",
+        "Reject this account?\n\nThis will tag the record as rejected.\n\nTo allow the same Gmail to sign up again, the Firebase Auth account must be deleted (requires Cloud Function adminDeleteAuthUserByUid).",
       confirmText: "Reject",
       danger: true,
       onConfirm: async () => {
         const target = u;
         setConfirm(null);
-        await rejectStudentConfirmed(target);
+        await rejectUserConfirmed(target);
       },
     });
   };
 
-  const isRejected = viewUser && String(viewUser.status || "").toLowerCase().trim() === "rejected";
+  const isRejected =
+    viewUser && String(viewUser.status || "").toLowerCase().trim() === "rejected";
+
+  const isApprovable = (u) => u && (isStudent(u) || isParent(u));
 
   const canApprove =
     viewUser &&
-    isStudent(viewUser) &&
+    isApprovable(viewUser) &&
     viewUser.emailVerified === true &&
     viewUser.adminApproved !== true &&
     !isRejected;
 
   const canReject =
     viewUser &&
-    isStudent(viewUser) &&
+    isApprovable(viewUser) &&
     viewUser.emailVerified === true &&
     viewUser.adminApproved !== true &&
     !isRejected;
@@ -608,9 +648,13 @@ const Users = () => {
             }}
           >
             <div style={{ padding: 16, borderBottom: "1px solid #eef2f7" }}>
-              <h3 style={{ margin: 0, fontSize: 18, color: "#111827" }}>{notice.title}</h3>
+              <h3 style={{ margin: 0, fontSize: 18, color: "#111827" }}>
+                {notice.title}
+              </h3>
             </div>
-            <div style={{ padding: 16, color: "#374151", whiteSpace: "pre-wrap" }}>{notice.message}</div>
+            <div style={{ padding: 16, color: "#374151", whiteSpace: "pre-wrap" }}>
+              {notice.message}
+            </div>
             <div className="ad-form-actions" style={{ justifyContent: "flex-end", padding: 16 }}>
               <button className="ad-btn" type="button" onClick={() => setNotice(null)}>
                 OK
@@ -635,9 +679,13 @@ const Users = () => {
             }}
           >
             <div style={{ padding: 16, borderBottom: "1px solid #eef2f7" }}>
-              <h3 style={{ margin: 0, fontSize: 18, color: "#111827" }}>{confirm.title}</h3>
+              <h3 style={{ margin: 0, fontSize: 18, color: "#111827" }}>
+                {confirm.title}
+              </h3>
             </div>
-            <div style={{ padding: 16, color: "#374151", whiteSpace: "pre-wrap" }}>{confirm.message}</div>
+            <div style={{ padding: 16, color: "#374151", whiteSpace: "pre-wrap" }}>
+              {confirm.message}
+            </div>
             <div className="ad-form-actions" style={{ justifyContent: "flex-end", padding: 16, gap: 10 }}>
               <button className="ad-btn" type="button" onClick={() => setConfirm(null)}>
                 Cancel
@@ -650,7 +698,11 @@ const Users = () => {
                   setConfirm(null);
                   if (fn) await fn();
                 }}
-                style={confirm.danger ? { borderColor: "#ef4444", background: "#ef4444", color: "#fff" } : undefined}
+                style={
+                  confirm.danger
+                    ? { borderColor: "#ef4444", background: "#ef4444", color: "#fff" }
+                    : undefined
+                }
               >
                 {confirm.confirmText || "Confirm"}
               </button>
@@ -676,7 +728,7 @@ const Users = () => {
         </button>
       </div>
 
-      {/* Dashboard-like categories (click to filter list) */}
+      {/* Dashboard-like categories */}
       <div
         className="ad-stats"
         style={{
@@ -697,7 +749,6 @@ const Users = () => {
             setStatusFilter("all");
           }}
         />
-
         <CategoryStat
           title="Admins"
           value={adminsCount}
@@ -709,7 +760,6 @@ const Users = () => {
             setStatusFilter("all");
           }}
         />
-
         <CategoryStat
           title="Students"
           value={studentsCount}
@@ -721,7 +771,6 @@ const Users = () => {
             setStatusFilter("all");
           }}
         />
-
         <CategoryStat
           title="Parents"
           value={parentsCount}
@@ -733,7 +782,6 @@ const Users = () => {
             setStatusFilter("all");
           }}
         />
-
         <CategoryStat
           title="Pending Email"
           value={pendingEmailCount}
@@ -746,7 +794,6 @@ const Users = () => {
             setStatusFilter("pendingEmail");
           }}
         />
-
         <CategoryStat
           title="Pending Admin"
           value={pendingAdminCount}
@@ -759,7 +806,6 @@ const Users = () => {
             setStatusFilter("pendingAdmin");
           }}
         />
-
         <CategoryStat
           title="Approved"
           value={approvedCount}
@@ -774,7 +820,7 @@ const Users = () => {
         />
       </div>
 
-      {/* REJECTED USERS MODAL (screen-like) */}
+      {/* REJECTED USERS MODAL */}
       {showRejectedModal && (
         <ModalShell zIndex={110} onClose={() => setShowRejectedModal(false)}>
           <div
@@ -799,7 +845,9 @@ const Users = () => {
               }}
             >
               <div>
-                <h3 style={{ margin: 0, fontSize: 18, color: "#111827" }}>Rejected Users</h3>
+                <h3 style={{ margin: 0, fontSize: 18, color: "#111827" }}>
+                  Rejected Users
+                </h3>
                 <div style={{ marginTop: 6, fontSize: 12, color: "#6b7280" }}>
                   These accounts are tagged as rejected and are not shown in the main Users table.
                 </div>
@@ -818,6 +866,7 @@ const Users = () => {
                       <th>Name</th>
                       <th>Email</th>
                       <th>Role</th>
+                      <th>Added By</th>
                       <th>Joined</th>
                       <th className="ad-col-actions">Actions</th>
                     </tr>
@@ -831,17 +880,15 @@ const Users = () => {
                           <span className={roleClass(u.role)}>{normalizeRole(u.role)}</span>
                           <span style={{ marginLeft: 8 }}>{statusPill(u)}</span>
                         </td>
+                        <td>
+                          {isParent(u) ? u.addedByStudentName || u.addedByStudentEmail || "-" : "-"}
+                        </td>
                         <td>{u.joined}</td>
                         <td className="ad-actions">
-                          <button
-                            className="ad-icon-btn"
-                            title="View"
-                            type="button"
-                            onClick={() => {
-                              setViewUser(u);
-                              setShowRejectedModal(false);
-                            }}
-                          >
+                          <button className="ad-icon-btn" title="View" type="button" onClick={() => {
+                            setViewUser(u);
+                            setShowRejectedModal(false);
+                          }}>
                             <IconMail size={16} />
                           </button>
 
@@ -859,7 +906,7 @@ const Users = () => {
 
                     {rejectedSorted.length === 0 && (
                       <tr>
-                        <td colSpan={5} style={{ padding: 16, color: "#6b7280", textAlign: "center" }}>
+                        <td colSpan={6} style={{ padding: 16, color: "#6b7280", textAlign: "center" }}>
                           No rejected users.
                         </td>
                       </tr>
@@ -873,14 +920,7 @@ const Users = () => {
               </div>
             </div>
 
-            <div
-              className="ad-form-actions"
-              style={{
-                justifyContent: "flex-end",
-                padding: 16,
-                borderTop: "1px solid #eef2f7",
-              }}
-            >
+            <div className="ad-form-actions" style={{ justifyContent: "flex-end", padding: 16, borderTop: "1px solid #eef2f7" }}>
               <button className="ad-btn" type="button" onClick={() => setShowRejectedModal(false)}>
                 Close
               </button>
@@ -889,7 +929,7 @@ const Users = () => {
         </ModalShell>
       )}
 
-      {/* ID Image Preview Modal (zoomable) */}
+      {/* ID Image Preview Modal */}
       {previewImage && (
         <div
           style={{
@@ -918,50 +958,31 @@ const Users = () => {
               overflow: "hidden",
               boxShadow: "0 20px 50px rgba(0,0,0,.35)",
               border: "1px solid #e5e7eb",
-              display: "flex",
-              flexDirection: "column",
             }}
             onClick={(e) => e.stopPropagation()}
           >
             <div
               style={{
-                padding: "10px 12px",
-                borderBottom: "1px solid #eef2f7",
+                height: 56,
+                padding: "0 14px",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
-                gap: 10,
+                borderBottom: "1px solid #eef2f7",
                 background: "#fff",
               }}
             >
-              <div style={{ fontWeight: 700, color: "#111827" }}>
-                ID Image Preview
-                <span style={{ marginLeft: 10, fontSize: 12, color: "#6b7280", fontWeight: 600 }}>
-                  Zoom: {Math.round(zoom * 100)}%
-                </span>
-              </div>
-
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <button type="button" className="ad-btn" onClick={() => setZoom((z) => Math.min(6, +(z + 0.25).toFixed(2)))}>
+              <div style={{ fontWeight: 800, color: "#111827" }}>ID Preview</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="ad-btn" type="button" onClick={() => setZoom((z) => Math.max(1, Math.round((z - 0.25) * 100) / 100))}>
+                  -
+                </button>
+                <button className="ad-btn" type="button" onClick={() => setZoom((z) => Math.min(4, Math.round((z + 0.25) * 100) / 100))}>
                   +
                 </button>
-                <button type="button" className="ad-btn" onClick={() => setZoom((z) => Math.max(1, +(z - 0.25).toFixed(2)))}>
-                  −
-                </button>
                 <button
-                  type="button"
                   className="ad-btn"
-                  onClick={() => {
-                    setZoom(1);
-                    setPan({ x: 0, y: 0 });
-                    lastPanRef.current = { x: 0, y: 0 };
-                  }}
-                >
-                  Reset
-                </button>
-                <button
                   type="button"
-                  className="ad-btn"
                   onClick={() => {
                     setPreviewImage(null);
                     setZoom(1);
@@ -976,70 +997,59 @@ const Users = () => {
 
             <div
               style={{
-                flex: 1,
-                background: "#0b1220",
                 position: "relative",
+                height: "calc(100% - 56px)",
+                background: "#0b1220",
                 overflow: "hidden",
-                cursor: zoom > 1 ? (isPanning ? "grabbing" : "grab") : "default",
-                userSelect: "none",
-                touchAction: "none",
+                cursor: isPanning ? "grabbing" : "grab",
               }}
               onWheel={(e) => {
                 e.preventDefault();
                 const delta = e.deltaY;
                 setZoom((z) => {
-                  const next = delta < 0 ? z + 0.15 : z - 0.15;
-                  const clamped = Math.max(1, Math.min(6, next));
-                  if (clamped === 1) {
-                    setPan({ x: 0, y: 0 });
-                    lastPanRef.current = { x: 0, y: 0 };
-                  }
-                  return +clamped.toFixed(2);
+                  const next = delta > 0 ? z - 0.15 : z + 0.15;
+                  return Math.max(1, Math.min(4, Math.round(next * 100) / 100));
                 });
               }}
               onMouseDown={(e) => {
-                if (zoom <= 1) return;
                 setIsPanning(true);
                 panStartRef.current = { x: e.clientX, y: e.clientY };
               }}
               onMouseMove={(e) => {
-                if (!isPanning || zoom <= 1) return;
+                if (!isPanning) return;
                 const dx = e.clientX - panStartRef.current.x;
                 const dy = e.clientY - panStartRef.current.y;
                 setPan({ x: lastPanRef.current.x + dx, y: lastPanRef.current.y + dy });
               }}
-              onMouseUp={() => setIsPanning(false)}
-              onMouseLeave={() => setIsPanning(false)}
+              onMouseUp={() => {
+                setIsPanning(false);
+                lastPanRef.current = pan;
+              }}
+              onMouseLeave={() => {
+                setIsPanning(false);
+                lastPanRef.current = pan;
+              }}
               onDoubleClick={() => {
-                setZoom((z) => {
-                  const next = z === 1 ? 2.5 : 1;
-                  if (next === 1) {
-                    setPan({ x: 0, y: 0 });
-                    lastPanRef.current = { x: 0, y: 0 };
-                  }
-                  return next;
-                });
+                if (zoom > 1) {
+                  setZoom(1);
+                  setPan({ x: 0, y: 0 });
+                  lastPanRef.current = { x: 0, y: 0 };
+                } else setZoom(2);
               }}
             >
               <img
                 src={previewImage}
-                alt="Full ID Preview"
-                draggable={false}
+                alt="Preview"
                 style={{
                   position: "absolute",
                   left: "50%",
                   top: "50%",
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "contain",
-                  transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px)) scale(${zoom})`,
-                  transformOrigin: "center center",
-                  imageRendering: "auto",
-                }}
-                onLoad={() => {
-                  setZoom(1);
-                  setPan({ x: 0, y: 0 });
-                  lastPanRef.current = { x: 0, y: 0 };
+                  transform: `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                  transformOrigin: "center",
+                  maxWidth: "none",
+                  maxHeight: "none",
+                  userSelect: "none",
+                  pointerEvents: "none",
                 }}
               />
 
@@ -1089,7 +1099,9 @@ const Users = () => {
               }}
             >
               <div>
-                <h3 style={{ margin: 0, fontSize: 18, color: "#111827" }}>User Details</h3>
+                <h3 style={{ margin: 0, fontSize: 18, color: "#111827" }}>
+                  User Details
+                </h3>
                 <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                   <span className={roleClass(viewUser.role)}>{normalizeRole(viewUser.role)}</span>
                   {statusPill(viewUser)}
@@ -1135,16 +1147,40 @@ const Users = () => {
                     )}
                   </div>
 
-                  <div style={{ marginTop: 10, fontSize: 12, color: "#6b7280" }}>ID photo used for verification.</div>
+                  <div style={{ marginTop: 10, fontSize: 12, color: "#6b7280" }}>
+                    ID photo used for verification.
+                  </div>
                 </div>
 
                 <div style={{ flex: "1 1 380px", minWidth: 280 }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", rowGap: 10, columnGap: 12, color: "#111827" }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "160px 1fr",
+                      rowGap: 10,
+                      columnGap: 12,
+                      color: "#111827",
+                    }}
+                  >
                     <div style={{ color: "#6b7280", fontWeight: 700 }}>Name</div>
                     <div>{viewUser.name || "-"}</div>
 
                     <div style={{ color: "#6b7280", fontWeight: 700 }}>Email</div>
                     <div>{viewUser.email || "-"}</div>
+
+                    {isParent(viewUser) ? (
+                      <>
+                        <div style={{ color: "#6b7280", fontWeight: 700 }}>Added By</div>
+                        <div>
+                          {viewUser.addedByStudentName || "-"}
+                          {viewUser.addedByStudentEmail ? (
+                            <span style={{ marginLeft: 8, color: "#6b7280" }}>
+                              ({viewUser.addedByStudentEmail})
+                            </span>
+                          ) : null}
+                        </div>
+                      </>
+                    ) : null}
 
                     <div style={{ color: "#6b7280", fontWeight: 700 }}>ID Number</div>
                     <div>{viewUser.idNumber || "-"}</div>
@@ -1159,34 +1195,15 @@ const Users = () => {
                     <div>{viewUser.status || "-"}</div>
                   </div>
 
-                  {isStudent(viewUser) && !viewUser.emailVerified && (
-                    <div
-                      style={{
-                        marginTop: 14,
-                        padding: 12,
-                        borderRadius: 10,
-                        border: "1px solid #e5e7eb",
-                        background: "#f9fafb",
-                        color: "#374151",
-                      }}
-                    >
-                      This student has not verified their email yet. Approval is disabled until email is verified.
+                  {(isStudent(viewUser) || isParent(viewUser)) && !viewUser.emailVerified && (
+                    <div style={{ marginTop: 14, padding: 12, borderRadius: 10, border: "1px solid #e5e7eb", background: "#f9fafb", color: "#374151" }}>
+                      This account has not verified their email yet. Approval is disabled until email is verified.
                     </div>
                   )}
 
                   {isRejectedUser(viewUser) && (
-                    <div
-                      style={{
-                        marginTop: 14,
-                        padding: 12,
-                        borderRadius: 10,
-                        border: "1px solid #fee2e2",
-                        background: "#fff1f2",
-                        color: "#9f1239",
-                        fontWeight: 700,
-                      }}
-                    >
-                      This student ID has been rejected.
+                    <div style={{ marginTop: 14, padding: 12, borderRadius: 10, border: "1px solid #fee2e2", background: "#fff1f2", color: "#9f1239", fontWeight: 700 }}>
+                      This account has been rejected.
                     </div>
                   )}
                 </div>
@@ -1194,28 +1211,30 @@ const Users = () => {
             </div>
 
             <div className="ad-form-actions" style={{ justifyContent: "space-between", padding: 16, borderTop: "1px solid #eef2f7" }}>
-              <div style={{ color: "#6b7280", fontSize: 12 }}>You can approve or reject only after email verification.</div>
+              <div style={{ color: "#6b7280", fontSize: 12 }}>
+                You can approve or reject only after email verification.
+              </div>
 
               <div style={{ display: "flex", gap: 10 }}>
-                {isStudent(viewUser) && (
+                {(isStudent(viewUser) || isParent(viewUser)) && (
                   <>
                     <button
                       className={`ad-btn ad-btn-primary ${canApprove ? "" : "disabled"}`}
                       type="button"
-                      onClick={() => approveStudent(viewUser)}
+                      onClick={() => approveUser(viewUser)}
                       disabled={!canApprove || isApproving}
                       style={{
                         opacity: canApprove && !isApproving ? 1 : 0.6,
                         cursor: canApprove && !isApproving ? "pointer" : "not-allowed",
                       }}
                     >
-                      {isApproving ? "Working..." : "Confirm ID & Approve"}
+                      {isApproving ? "Working..." : isStudent(viewUser) ? "Confirm ID & Approve" : "Approve Account"}
                     </button>
 
                     <button
                       className={`ad-btn ${canReject ? "" : "disabled"}`}
                       type="button"
-                      onClick={() => rejectStudent(viewUser)}
+                      onClick={() => rejectUser(viewUser)}
                       disabled={!canReject || isApproving}
                       style={{
                         opacity: canReject && !isApproving ? 1 : 0.6,
@@ -1253,7 +1272,9 @@ const Users = () => {
             }}
           >
             <div style={{ padding: 16, borderBottom: "1px solid #eef2f7" }}>
-              <h3 style={{ margin: 0, fontSize: 18, color: "#111827" }}>Confirm Deletion</h3>
+              <h3 style={{ margin: 0, fontSize: 18, color: "#111827" }}>
+                Confirm Deletion
+              </h3>
             </div>
 
             <div style={{ padding: 16, color: "#374151" }}>
@@ -1261,6 +1282,10 @@ const Users = () => {
               <div style={{ marginTop: 10, fontSize: 12, color: "#6b7280" }}>
                 Best practice: deploy Cloud Function <b>deleteUserCompletely</b> so the user is removed from Firestore,
                 Firebase Auth (email freed), and Storage.
+                <br />
+                <br />
+                <b>Note:</b> If this is a Parent, the system will automatically remove it from linked students so their
+                Inbox won’t get stuck loading.
               </div>
             </div>
 
@@ -1282,7 +1307,7 @@ const Users = () => {
       )}
 
       {/* Search */}
-      <SearchBox placeholder="Search users" value={query} onChange={setQuery} />
+      <SearchBox placeholder="Search users" value={queryText} onChange={setQueryText} />
 
       {/* Role Filters */}
       <div className="ad-filter-row" role="group" aria-label="Role filters">
@@ -1291,11 +1316,17 @@ const Users = () => {
             key={role}
             type="button"
             className={`ad-chip ${roleFilter === role ? "active" : ""} ${
-              role === "all" ? "gray" : role === "admin" ? "purple" : role === "student" ? "cyan" : "emerald"
+              role === "all"
+                ? "gray"
+                : role === "admin"
+                ? "purple"
+                : role === "student"
+                ? "cyan"
+                : "emerald"
             }`}
             onClick={() => {
               setRoleFilter(role);
-              setStatusFilter("all"); // Role chips reset status to avoid confusing combined filters
+              setStatusFilter("all");
             }}
           >
             <span className="dot" />
@@ -1325,7 +1356,7 @@ const Users = () => {
         </select>
       </div>
 
-      {/* Users Table (rejected excluded by design) */}
+      {/* Users Table */}
       <div className="ad-table-card">
         <table className="ad-table">
           <thead>
@@ -1345,6 +1376,7 @@ const Users = () => {
                   Role{caret("role")}
                 </button>
               </th>
+              <th>Added By</th>
               <th>
                 <button type="button" className="ad-th-btn" onClick={() => toggleSort("joined")}>
                   Joined{caret("joined")}
@@ -1362,6 +1394,7 @@ const Users = () => {
                   <span className={roleClass(u.role)}>{normalizeRole(u.role)}</span>
                   <span style={{ marginLeft: 8 }}>{statusPill(u)}</span>
                 </td>
+                <td>{isParent(u) ? u.addedByStudentName || u.addedByStudentEmail || "-" : "-"}</td>
                 <td>{u.joined}</td>
                 <td className="ad-actions">
                   <button className="ad-icon-btn" title="View" type="button" onClick={() => setViewUser(u)}>
@@ -1382,7 +1415,7 @@ const Users = () => {
 
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={5} style={{ padding: 16, color: "#6b7280", textAlign: "center" }}>
+                <td colSpan={6} style={{ padding: 16, color: "#6b7280", textAlign: "center" }}>
                   No users found.
                 </td>
               </tr>
