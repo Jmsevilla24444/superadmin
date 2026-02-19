@@ -13,7 +13,6 @@ import {
 import Users from "./Users";
 import Reports from "./Reports";
 import SuperAdminCreateAdmin from "./SuperAdminCreateAdmin";
-import SuperAdminEnrollees from "./SuperAdminEnrollees";
 import LogoutMenu from "./LogoutMenu";
 
 import { auth, db } from "../service/firebase";
@@ -110,35 +109,6 @@ const Sidebar = ({ route, counts }) => {
                 title="Pending admin approval"
               >
                 {counts.pendingAdmin}
-              </span>
-            </span>
-          )}
-        </a>
-
-        <a className={isActive("#/su/enrollees")} href="#/su/enrollees">
-          <span className="ad-nav-ico">
-            <IconMail size={20} stroke="#eaf2ff" />
-          </span>
-          <span>Enrollees</span>
-          {counts.enrollees > 0 && (
-            <span style={{ marginLeft: "auto" }}>
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  minWidth: 18,
-                  height: 18,
-                  padding: "0 6px",
-                  background: COLORS.rose,
-                  color: "#fff",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  borderRadius: 999,
-                  boxShadow: "0 1px 2px rgba(0,0,0,.15)",
-                }}
-              >
-                {counts.enrollees}
               </span>
             </span>
           )}
@@ -417,7 +387,6 @@ const SuperAdminDashboard = () => {
     rejected: 0,
 
     // other collections
-    enrollees: 0,
     facilities: 0,
     reports: 0,
   });
@@ -449,8 +418,12 @@ const SuperAdminDashboard = () => {
 
       snap.forEach((d) => {
         const data = d.data() || {};
-        const role = String(data.role || "").toLowerCase().trim();
-        const status = String(data.status || "").toLowerCase().trim();
+        const role = String(data.role || "")
+          .toLowerCase()
+          .trim();
+        const status = String(data.status || "")
+          .toLowerCase()
+          .trim();
 
         const emailVerified = data.emailVerified === true;
         const adminApproved = data.adminApproved === true;
@@ -497,11 +470,6 @@ const SuperAdminDashboard = () => {
       setCounts((prev) => ({ ...prev, admins: snap.size })),
     );
 
-    // --- Realtime: Enrollees
-    const unsubEnrollees = onSnapshot(collection(db, "Schedules"), (snap) =>
-      setCounts((prev) => ({ ...prev, enrollees: snap.size })),
-    );
-
     // --- Realtime: Facilities inbox
     const unsubFacilities = onSnapshot(
       collection(db, "FacilitiesInbox"),
@@ -518,7 +486,6 @@ const SuperAdminDashboard = () => {
       window.removeEventListener("hashchange", onHashChange);
       unsubUsers();
       unsubAdmins();
-      unsubEnrollees();
       unsubFacilities();
       unsubReports();
     };
@@ -541,14 +508,6 @@ const SuperAdminDashboard = () => {
           <>
             <HeaderBar title="Create Admin" />
             <SuperAdminCreateAdmin />
-          </>
-        );
-
-      case "#/su/enrollees":
-        return (
-          <>
-            <HeaderBar title="New Enrollees" />
-            <SuperAdminEnrollees />
           </>
         );
 
@@ -586,9 +545,9 @@ const SuperAdminDashboard = () => {
         // Graph palette (consistent everywhere)
         const STATUS_COLORS = [
           COLORS.emerald, // Approved
-          COLORS.amber,   // Pending Admin
-          COLORS.blue,    // Pending Email
-          COLORS.rose,    // Rejected
+          COLORS.amber, // Pending Admin
+          COLORS.blue, // Pending Email
+          COLORS.rose, // Rejected
         ];
 
         return (
@@ -786,13 +745,27 @@ const SuperAdminDashboard = () => {
                   <RoleBars
                     total={counts.users}
                     items={[
-                      { label: "Students", value: counts.students, color: COLORS.indigo },
-                      { label: "Parents", value: counts.parents, color: COLORS.emerald },
-                      { label: "Other", value: counts.others, color: COLORS.slate },
+                      {
+                        label: "Students",
+                        value: counts.students,
+                        color: COLORS.indigo,
+                      },
+                      {
+                        label: "Parents",
+                        value: counts.parents,
+                        color: COLORS.emerald,
+                      },
+                      {
+                        label: "Other",
+                        value: counts.others,
+                        color: COLORS.slate,
+                      },
                     ]}
                   />
 
-                  <div style={{ marginTop: 10, color: "#6b7280", fontSize: 12 }}>
+                  <div
+                    style={{ marginTop: 10, color: "#6b7280", fontSize: 12 }}
+                  >
                     Admins are counted separately: <b>{counts.admins}</b>
                   </div>
                 </div>
