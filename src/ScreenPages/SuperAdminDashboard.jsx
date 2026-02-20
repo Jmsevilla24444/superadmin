@@ -1,5 +1,6 @@
 import React from "react";
 import "../AdminDashboard.css";
+import FacilitiesInbox from "../FacilitiesInbox";
 
 import {
   IconHome,
@@ -13,7 +14,7 @@ import {
 import Users from "./Users";
 import Reports from "./Reports";
 import SuperAdminCreateAdmin from "./SuperAdminCreateAdmin";
-import SuperAdminEnrollees from "./SuperAdminEnrollees";
+
 import LogoutMenu from "./LogoutMenu";
 
 import { auth, db } from "../service/firebase";
@@ -41,11 +42,7 @@ const COLORS = {
 };
 
 // Placeholder for FacilitiesInbox if not yet implemented
-const FacilitiesInbox = () => (
-  <div style={{ padding: 24, textAlign: "center" }}>
-    Facilities Inbox content goes here
-  </div>
-);
+
 
 // Sidebar Component
 const Sidebar = ({ route, counts }) => {
@@ -115,34 +112,7 @@ const Sidebar = ({ route, counts }) => {
           )}
         </a>
 
-        <a className={isActive("#/su/enrollees")} href="#/su/enrollees">
-          <span className="ad-nav-ico">
-            <IconMail size={20} stroke="#eaf2ff" />
-          </span>
-          <span>Enrollees</span>
-          {counts.enrollees > 0 && (
-            <span style={{ marginLeft: "auto" }}>
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  minWidth: 18,
-                  height: 18,
-                  padding: "0 6px",
-                  background: COLORS.rose,
-                  color: "#fff",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  borderRadius: 999,
-                  boxShadow: "0 1px 2px rgba(0,0,0,.15)",
-                }}
-              >
-                {counts.enrollees}
-              </span>
-            </span>
-          )}
-        </a>
+       
 
         <a className={isActive("#/su/create-admin")} href="#/su/create-admin">
           <span className="ad-nav-ico">
@@ -503,10 +473,11 @@ const SuperAdminDashboard = () => {
     );
 
     // --- Realtime: Facilities inbox
-    const unsubFacilities = onSnapshot(
-      collection(db, "FacilitiesInbox"),
-      (snap) => setCounts((prev) => ({ ...prev, facilities: snap.size })),
-    );
+   const unsubFacilities = onSnapshot(
+  collection(db, "incomingFacilities"),
+  (snap) => setCounts((prev) => ({ ...prev, facilities: snap.size })),
+);
+
 
     // --- Realtime: Reports (collectionGroup)
     const unsubReports = onSnapshot(collectionGroup(db, "reports"), (snap) =>
@@ -543,15 +514,6 @@ const SuperAdminDashboard = () => {
             <SuperAdminCreateAdmin />
           </>
         );
-
-      case "#/su/enrollees":
-        return (
-          <>
-            <HeaderBar title="New Enrollees" />
-            <SuperAdminEnrollees />
-          </>
-        );
-
       case "#/su/facilities":
         return (
           <>
@@ -654,7 +616,7 @@ const SuperAdminDashboard = () => {
                 />
                 <QuickAction
                   title="Approval"
-                  desc="Review ID approvals"
+                  desc="Events and Facilities Approvals"
                   icon={<IconReport stroke="#fff" />}
                   href="#/su/approval"
                   variant="amber"
