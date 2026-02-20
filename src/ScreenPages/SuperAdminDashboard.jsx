@@ -1,6 +1,6 @@
 import React from "react";
 import "../AdminDashboard.css";
-import FacilitiesInbox from "../FacilitiesInbox";
+import FacilitiesInbox from "./FacilitiesInbox";
 
 import {
   IconHome,
@@ -9,20 +9,18 @@ import {
   IconReport,
   IconPlus,
   IconMail,
+  IconGlobe,
 } from "../icons";
 
 import Users from "./Users";
 import Reports from "./Reports";
 import SuperAdminCreateAdmin from "./SuperAdminCreateAdmin";
-<<<<<<< HEAD
-
-=======
->>>>>>> 3fe596b3a02f7ab070ebd6101d4664603fee7c53
 import LogoutMenu from "./LogoutMenu";
 
 import { auth, db } from "../service/firebase";
 import { collection, onSnapshot, collectionGroup } from "firebase/firestore";
 import Approval from "./approval";
+import SuperAdminChatbotFeeder from "./Superadminchatbotfeeder";
 
 /**
  * COLOR SYSTEM (matches your AdminDashboard.css)
@@ -115,11 +113,7 @@ const Sidebar = ({ route, counts }) => {
           )}
         </a>
 
-<<<<<<< HEAD
-       
 
-=======
->>>>>>> 3fe596b3a02f7ab070ebd6101d4664603fee7c53
         <a className={isActive("#/su/create-admin")} href="#/su/create-admin">
           <span className="ad-nav-ico">
             <IconPlus size={20} stroke="#eaf2ff" />
@@ -190,6 +184,13 @@ const Sidebar = ({ route, counts }) => {
               </span>
             </span>
           )}
+        </a>
+
+        <a className={isActive("#/su/chatbot")} href="#/su/chatbot">
+          <span className="ad-nav-ico">
+            <IconGlobe size={20} stroke="#eaf2ff" />
+          </span>
+          <span>Chatbot Feeder</span>
         </a>
       </nav>
     </aside>
@@ -517,10 +518,7 @@ const SuperAdminDashboard = () => {
             <SuperAdminCreateAdmin />
           </>
         );
-<<<<<<< HEAD
-=======
 
->>>>>>> 3fe596b3a02f7ab070ebd6101d4664603fee7c53
       case "#/su/facilities":
         return (
           <>
@@ -542,6 +540,14 @@ const SuperAdminDashboard = () => {
           <>
             <HeaderBar title="Reports" />
             <Reports />
+          </>
+        );
+
+      case "#/su/chatbot":
+        return (
+          <>
+            <HeaderBar title="Chatbot Knowledge Base" />
+            <SuperAdminChatbotFeeder />
           </>
         );
 
@@ -648,6 +654,13 @@ const SuperAdminDashboard = () => {
                   icon={<IconPlus stroke="#fff" />}
                   href="#/su/create-admin"
                   variant="violet"
+                />
+                <QuickAction
+                  title="Chatbot Feeder"
+                  desc="Manage chatbot knowledge base"
+                  icon={<IconGlobe stroke="#fff" />}
+                  href="#/su/chatbot"
+                  variant="indigo"
                 />
               </div>
             </section>
