@@ -14,7 +14,10 @@ import {
 import Users from "./Users";
 import Reports from "./Reports";
 import SuperAdminCreateAdmin from "./SuperAdminCreateAdmin";
+<<<<<<< HEAD
 
+=======
+>>>>>>> 3fe596b3a02f7ab070ebd6101d4664603fee7c53
 import LogoutMenu from "./LogoutMenu";
 
 import { auth, db } from "../service/firebase";
@@ -112,8 +115,11 @@ const Sidebar = ({ route, counts }) => {
           )}
         </a>
 
+<<<<<<< HEAD
        
 
+=======
+>>>>>>> 3fe596b3a02f7ab070ebd6101d4664603fee7c53
         <a className={isActive("#/su/create-admin")} href="#/su/create-admin">
           <span className="ad-nav-ico">
             <IconPlus size={20} stroke="#eaf2ff" />
@@ -387,7 +393,6 @@ const SuperAdminDashboard = () => {
     rejected: 0,
 
     // other collections
-    enrollees: 0,
     facilities: 0,
     reports: 0,
   });
@@ -419,8 +424,12 @@ const SuperAdminDashboard = () => {
 
       snap.forEach((d) => {
         const data = d.data() || {};
-        const role = String(data.role || "").toLowerCase().trim();
-        const status = String(data.status || "").toLowerCase().trim();
+        const role = String(data.role || "")
+          .toLowerCase()
+          .trim();
+        const status = String(data.status || "")
+          .toLowerCase()
+          .trim();
 
         const emailVerified = data.emailVerified === true;
         const adminApproved = data.adminApproved === true;
@@ -467,11 +476,6 @@ const SuperAdminDashboard = () => {
       setCounts((prev) => ({ ...prev, admins: snap.size })),
     );
 
-    // --- Realtime: Enrollees
-    const unsubEnrollees = onSnapshot(collection(db, "Schedules"), (snap) =>
-      setCounts((prev) => ({ ...prev, enrollees: snap.size })),
-    );
-
     // --- Realtime: Facilities inbox
    const unsubFacilities = onSnapshot(
   collection(db, "incomingFacilities"),
@@ -489,7 +493,6 @@ const SuperAdminDashboard = () => {
       window.removeEventListener("hashchange", onHashChange);
       unsubUsers();
       unsubAdmins();
-      unsubEnrollees();
       unsubFacilities();
       unsubReports();
     };
@@ -514,6 +517,10 @@ const SuperAdminDashboard = () => {
             <SuperAdminCreateAdmin />
           </>
         );
+<<<<<<< HEAD
+=======
+
+>>>>>>> 3fe596b3a02f7ab070ebd6101d4664603fee7c53
       case "#/su/facilities":
         return (
           <>
@@ -548,9 +555,9 @@ const SuperAdminDashboard = () => {
         // Graph palette (consistent everywhere)
         const STATUS_COLORS = [
           COLORS.emerald, // Approved
-          COLORS.amber,   // Pending Admin
-          COLORS.blue,    // Pending Email
-          COLORS.rose,    // Rejected
+          COLORS.amber, // Pending Admin
+          COLORS.blue, // Pending Email
+          COLORS.rose, // Rejected
         ];
 
         return (
@@ -748,13 +755,27 @@ const SuperAdminDashboard = () => {
                   <RoleBars
                     total={counts.users}
                     items={[
-                      { label: "Students", value: counts.students, color: COLORS.indigo },
-                      { label: "Parents", value: counts.parents, color: COLORS.emerald },
-                      { label: "Other", value: counts.others, color: COLORS.slate },
+                      {
+                        label: "Students",
+                        value: counts.students,
+                        color: COLORS.indigo,
+                      },
+                      {
+                        label: "Parents",
+                        value: counts.parents,
+                        color: COLORS.emerald,
+                      },
+                      {
+                        label: "Other",
+                        value: counts.others,
+                        color: COLORS.slate,
+                      },
                     ]}
                   />
 
-                  <div style={{ marginTop: 10, color: "#6b7280", fontSize: 12 }}>
+                  <div
+                    style={{ marginTop: 10, color: "#6b7280", fontSize: 12 }}
+                  >
                     Admins are counted separately: <b>{counts.admins}</b>
                   </div>
                 </div>
