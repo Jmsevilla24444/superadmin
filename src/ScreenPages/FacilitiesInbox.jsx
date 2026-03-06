@@ -231,7 +231,7 @@ const FacilitiesInbox = () => {
           aria-label="Status filters"
           style={{ margin: 0 }}
         >
-          {["pending", "resolved", "rejected", "all"].map((s) => (
+          {[ "all"].map((s) => (
             <button
               key={s}
               type="button"
@@ -299,20 +299,7 @@ const FacilitiesInbox = () => {
                       <IconEye size={16} />
                     </button>
 
-                    <button
-                      className="ad-icon-btn"
-                      title="Approve"
-                      type="button"
-                      disabled={status !== "pending"}
-                      onClick={() => setApproveItem(f)}
-                      style={
-                        status !== "pending"
-                          ? { opacity: 0.4, cursor: "not-allowed" }
-                          : undefined
-                      }
-                    >
-                      <IconCheck size={16} />
-                    </button>
+                    
 
                     <button
                       className="ad-icon-btn danger"
@@ -512,16 +499,7 @@ const FacilitiesInbox = () => {
                     </div>
                   </div>
 
-                  {getStatus(viewItem) === "rejected" ? (
-                    <div>
-                      <div style={{ fontWeight: 600, color: "#111827" }}>
-                        Rejection Reason
-                      </div>
-                      <div style={{ color: "#374151" }}>
-                        {viewItem.rejectionReason || "-"}
-                      </div>
-                    </div>
-                  ) : null}
+                  
                 </div>
 
                 <div

@@ -321,7 +321,7 @@ const SuperAdminChatbotFeeder = () => {
 
   return (
     <section className="ad-section">
-      <h2 className="ad-section-title">Chatbot Knowledge Base</h2>
+      <h2 className="ad-section-title">Chatbot</h2>
 
       {/* Tab Switcher */}
       <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
@@ -635,7 +635,7 @@ const SuperAdminChatbotFeeder = () => {
           <div style={{ background: "#fff", borderRadius: 12, width: 420, padding: 24, boxShadow: "0 8px 32px rgba(0,0,0,.2)" }}>
             <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Delete Entry?</div>
             <div style={{ color: "#6b7280", marginBottom: 20, fontSize: 14 }}>
-              This will permanently remove the entry from the chatbot knowledge base. This action cannot be undone.
+              This will permanently remove the entry from the chatbot . This action cannot be undone.
             </div>
             <div className="ad-form-actions">
               <button className="ad-btn" onClick={() => setConfirmDeleteId(null)}>Cancel</button>

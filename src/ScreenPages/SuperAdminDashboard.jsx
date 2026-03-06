@@ -150,12 +150,7 @@ const Sidebar = ({ route, counts }) => {
           )}
         </a>
 
-        <a className={isActive("#/su/approval")} href="#/su/approval">
-          <span className="ad-nav-ico">
-            <IconReport size={20} stroke="#eaf2ff" />
-          </span>
-          <span>Approval</span>
-        </a>
+      
 
         <a className={isActive("#/su/reports")} href="#/su/reports">
           <span className="ad-nav-ico">
@@ -527,13 +522,7 @@ const SuperAdminDashboard = () => {
           </>
         );
 
-      case "#/su/approval":
-        return (
-          <>
-            <HeaderBar title="Approval" />
-            <Approval />
-          </>
-        );
+    
 
       case "#/su/reports":
         return (
@@ -546,7 +535,7 @@ const SuperAdminDashboard = () => {
       case "#/su/chatbot":
         return (
           <>
-            <HeaderBar title="Chatbot Knowledge Base" />
+            <HeaderBar title="Chatbot " />
             <SuperAdminChatbotFeeder />
           </>
         );
@@ -627,13 +616,7 @@ const SuperAdminDashboard = () => {
                   href="#/su/users"
                   variant="indigo"
                 />
-                <QuickAction
-                  title="Approval"
-                  desc="Events and Facilities Approvals"
-                  icon={<IconReport stroke="#fff" />}
-                  href="#/su/approval"
-                  variant="amber"
-                />
+                
                 <QuickAction
                   title="Facilities Inbox"
                   desc="Review facilities submitted by admins"
